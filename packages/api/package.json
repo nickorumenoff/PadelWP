@@ -1,0 +1,27 @@
+{
+  "name": "@padel-ve/api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "tsx watch --no-warnings src/server.ts",
+    "start": "tsx --no-warnings src/server.ts",
+    "db:seed": "tsx --no-warnings scripts/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@padel-ve/shared": "workspace:*",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^22.7.4",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}
