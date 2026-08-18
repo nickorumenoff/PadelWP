@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-primary {
+  @apply btn bg-brand-blue text-white hover:bg-brand-blue-light;
+}
+
+.btn-accent {
+  @apply btn bg-brand-green text-white hover:bg-brand-green-dark;
+}
+
+.btn-outline {
+  @apply btn border border-line text-ink hover:border-brand-blue hover:text-brand-blue bg-white;
+}
+
+.card {
+  @apply bg-white border border-line rounded-xl2 shadow-card;
+}
+
+.input {
+  @apply w-full rounded-lg border border-line px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand-blue-light/40 focus:border-brand-blue-light;
+}
+
+.label {
+  @apply block text-xs font-medium text-muted mb-1.5;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.badge-green {
+  @apply badge bg-brand-green-light text-brand-green-dark;
+}
+
+.badge-blue {
+  @apply badge bg-brand-blue-50 text-brand-blue;
+}
