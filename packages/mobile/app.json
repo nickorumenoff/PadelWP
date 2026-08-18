@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Padel WP",
+    "slug": "padel-ve",
+    "scheme": "padelve",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FFFFFF",
+    "ios": {
+      "bundleIdentifier": "com.padelve.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.padelve.app"
+    }
+  }
+}
