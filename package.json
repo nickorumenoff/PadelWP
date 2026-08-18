@@ -1,0 +1,21 @@
+{
+  "name": "padel-ve",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @padel-ve/api dev",
+    "dev:web": "pnpm --filter @padel-ve/web dev",
+    "build:shared": "pnpm --filter @padel-ve/shared build",
+    "db:seed": "pnpm --filter @padel-ve/api db:seed",
+    "start": "pnpm --filter @padel-ve/api db:seed && pnpm --filter @padel-ve/api start"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "esbuild", "prisma"]
+  }
+}
