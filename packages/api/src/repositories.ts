@@ -29,6 +29,8 @@ export interface ClubRow {
   city: string;
   status: string;
   visibilityPlan: string;
+  openHour: number;
+  closeHour: number;
   createdAt: string;
 }
 
@@ -38,6 +40,7 @@ export interface CourtRow {
   name: string;
   type: string;
   indoor: number;
+  lighting: number;
   pricePerHourUsd: number;
 }
 
@@ -60,6 +63,8 @@ export interface MatchRow {
   levelMin: number;
   levelMax: number;
   status: string;
+  winnerTeam: number | null;
+  completedAt: string | null;
   createdAt: string;
 }
 
@@ -96,6 +101,29 @@ export interface SponsorshipRow {
   endDate: string | null;
   status: string;
   amountPaidUsd: number;
+}
+
+export interface TournamentRow {
+  id: string;
+  createdBy: string;
+  clubId: string | null;
+  name: string;
+  description: string | null;
+  city: string;
+  levelMin: number;
+  levelMax: number;
+  startDate: string;
+  endDate: string | null;
+  maxPlayers: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface TournamentRegistrationRow {
+  id: string;
+  tournamentId: string;
+  userId: string;
+  createdAt: string;
 }
 
 // ---------- Users ----------
@@ -159,6 +187,9 @@ export const Users = {
   findById(id: string): UserRow | undefined {
     return db.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as UserRow | undefined;
   },
+  updateLevel(id: string, level: number) {
+    db.prepare(`UPDATE users SET level = ? WHERE id = ?`).run(level, id);
+  },
 };
 
 // ---------- Clubs ----------
@@ -174,12 +205,26 @@ export const Clubs = {
       city: input.city,
       status: "APPROVED",
       visibilityPlan: "NONE",
+      openHour: 8,
+      closeHour: 22,
       createdAt: nowIso(),
     };
     db.prepare(
-      `INSERT INTO clubs (id,ownerId,name,description,address,city,status,visibilityPlan,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?)`
-    ).run(row.id, row.ownerId, row.name, row.description, row.address, row.city, row.status, row.visibilityPlan, row.createdAt);
+      `INSERT INTO clubs (id,ownerId,name,description,address,city,status,visibilityPlan,openHour,closeHour,createdAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      row.id,
+      row.ownerId,
+      row.name,
+      row.description,
+      row.address,
+      row.city,
+      row.status,
+      row.visibilityPlan,
+      row.openHour,
+      row.closeHour,
+      row.createdAt
+    );
     return row;
   },
   findById(id: string): ClubRow | undefined {
@@ -194,26 +239,39 @@ export const Clubs = {
   updateVisibilityPlan(id: string, plan: string) {
     db.prepare(`UPDATE clubs SET visibilityPlan = ? WHERE id = ?`).run(plan, id);
   },
+  updateHours(id: string, openHour: number, closeHour: number): ClubRow | undefined {
+    db.prepare(`UPDATE clubs SET openHour = ?, closeHour = ? WHERE id = ?`).run(openHour, closeHour, id);
+    return Clubs.findById(id);
+  },
 };
 
 // ---------- Courts ----------
 
 export const Courts = {
-  create(input: { clubId: string; name: string; type: string; indoor: boolean; pricePerHourUsd: number }): CourtRow {
+  create(input: {
+    clubId: string;
+    name: string;
+    type: string;
+    indoor: boolean;
+    lighting: boolean;
+    pricePerHourUsd: number;
+  }): CourtRow {
     const row: CourtRow = {
       id: newId("court"),
       clubId: input.clubId,
       name: input.name,
       type: input.type,
       indoor: input.indoor ? 1 : 0,
+      lighting: input.lighting ? 1 : 0,
       pricePerHourUsd: input.pricePerHourUsd,
     };
-    db.prepare(`INSERT INTO courts (id,clubId,name,type,indoor,pricePerHourUsd) VALUES (?,?,?,?,?,?)`).run(
+    db.prepare(`INSERT INTO courts (id,clubId,name,type,indoor,lighting,pricePerHourUsd) VALUES (?,?,?,?,?,?,?)`).run(
       row.id,
       row.clubId,
       row.name,
       row.type,
       row.indoor,
+      row.lighting,
       row.pricePerHourUsd
     );
     return row;
@@ -223,6 +281,29 @@ export const Courts = {
   },
   listByClub(clubId: string): CourtRow[] {
     return db.prepare(`SELECT * FROM courts WHERE clubId = ?`).all(clubId) as unknown as CourtRow[];
+  },
+  update(
+    id: string,
+    input: { name?: string; type?: string; indoor?: boolean; lighting?: boolean; pricePerHourUsd?: number }
+  ): CourtRow | undefined {
+    const current = Courts.findById(id);
+    if (!current) return undefined;
+    const next = {
+      name: input.name ?? current.name,
+      type: input.type ?? current.type,
+      indoor: input.indoor === undefined ? current.indoor : input.indoor ? 1 : 0,
+      lighting: input.lighting === undefined ? current.lighting : input.lighting ? 1 : 0,
+      pricePerHourUsd: input.pricePerHourUsd ?? current.pricePerHourUsd,
+    };
+    db.prepare(`UPDATE courts SET name = ?, type = ?, indoor = ?, lighting = ?, pricePerHourUsd = ? WHERE id = ?`).run(
+      next.name,
+      next.type,
+      next.indoor,
+      next.lighting,
+      next.pricePerHourUsd,
+      id
+    );
+    return Courts.findById(id);
   },
 };
 
@@ -259,6 +340,16 @@ export const Bookings = {
   listByUser(userId: string): BookingRow[] {
     return db.prepare(`SELECT * FROM bookings WHERE userId = ? ORDER BY date DESC`).all(userId) as unknown as BookingRow[];
   },
+  listByClub(clubId: string): BookingRow[] {
+    return db
+      .prepare(
+        `SELECT b.* FROM bookings b
+         JOIN courts c ON c.id = b.courtId
+         WHERE c.clubId = ?
+         ORDER BY b.date DESC, b.startTime ASC`
+      )
+      .all(clubId) as unknown as BookingRow[];
+  },
 };
 
 // ---------- Matches ----------
@@ -273,11 +364,24 @@ export const Matches = {
       levelMin: input.levelMin,
       levelMax: input.levelMax,
       status: "OPEN",
+      winnerTeam: null,
+      completedAt: null,
       createdAt: nowIso(),
     };
     db.prepare(
-      `INSERT INTO matches (id,bookingId,creatorId,type,levelMin,levelMax,status,createdAt) VALUES (?,?,?,?,?,?,?,?)`
-    ).run(row.id, row.bookingId, row.creatorId, row.type, row.levelMin, row.levelMax, row.status, row.createdAt);
+      `INSERT INTO matches (id,bookingId,creatorId,type,levelMin,levelMax,status,winnerTeam,completedAt,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      row.id,
+      row.bookingId,
+      row.creatorId,
+      row.type,
+      row.levelMin,
+      row.levelMax,
+      row.status,
+      row.winnerTeam,
+      row.completedAt,
+      row.createdAt
+    );
     return row;
   },
   findById(id: string): MatchRow | undefined {
@@ -288,6 +392,14 @@ export const Matches = {
   },
   updateStatus(id: string, status: string) {
     db.prepare(`UPDATE matches SET status = ? WHERE id = ?`).run(status, id);
+  },
+  setResult(id: string, winnerTeam: 1 | 2): MatchRow | undefined {
+    db.prepare(`UPDATE matches SET status = 'COMPLETED', winnerTeam = ?, completedAt = ? WHERE id = ?`).run(
+      winnerTeam,
+      nowIso(),
+      id
+    );
+    return Matches.findById(id);
   },
   list(filters: { city?: string; levelMin?: number; levelMax?: number }): MatchRow[] {
     // Join manual con bookings/courts/clubs para filtrar por ciudad.
@@ -313,6 +425,16 @@ export const Matches = {
     }
     sql += ` ORDER BY m.createdAt DESC`;
     return db.prepare(sql).all(...params) as unknown as MatchRow[];
+  },
+  listForUser(userId: string): MatchRow[] {
+    return db
+      .prepare(
+        `SELECT m.* FROM matches m
+         JOIN match_players mp ON mp.matchId = m.id
+         WHERE mp.userId = ?
+         ORDER BY m.createdAt DESC`
+      )
+      .all(userId) as unknown as MatchRow[];
   },
 };
 
@@ -449,5 +571,100 @@ export const Sponsorships = {
   activate(id: string, endDate: string): SponsorshipRow | undefined {
     db.prepare(`UPDATE sponsorships SET status = 'ACTIVE', endDate = ? WHERE id = ?`).run(endDate, id);
     return Sponsorships.findById(id);
+  },
+};
+
+// ---------- Tournaments ----------
+
+export const Tournaments = {
+  create(input: {
+    createdBy: string;
+    clubId?: string;
+    name: string;
+    description?: string;
+    city: string;
+    levelMin: number;
+    levelMax: number;
+    startDate: string;
+    endDate?: string;
+    maxPlayers: number;
+  }): TournamentRow {
+    const row: TournamentRow = {
+      id: newId("tourney"),
+      createdBy: input.createdBy,
+      clubId: input.clubId ?? null,
+      name: input.name,
+      description: input.description ?? null,
+      city: input.city,
+      levelMin: input.levelMin,
+      levelMax: input.levelMax,
+      startDate: input.startDate,
+      endDate: input.endDate ?? null,
+      maxPlayers: input.maxPlayers,
+      status: "OPEN",
+      createdAt: nowIso(),
+    };
+    db.prepare(
+      `INSERT INTO tournaments (id,createdBy,clubId,name,description,city,levelMin,levelMax,startDate,endDate,maxPlayers,status,createdAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      row.id,
+      row.createdBy,
+      row.clubId,
+      row.name,
+      row.description,
+      row.city,
+      row.levelMin,
+      row.levelMax,
+      row.startDate,
+      row.endDate,
+      row.maxPlayers,
+      row.status,
+      row.createdAt
+    );
+    return row;
+  },
+  findById(id: string): TournamentRow | undefined {
+    return db.prepare(`SELECT * FROM tournaments WHERE id = ?`).get(id) as TournamentRow | undefined;
+  },
+  list(city?: string): TournamentRow[] {
+    if (city) {
+      return db
+        .prepare(`SELECT * FROM tournaments WHERE city = ? ORDER BY startDate ASC`)
+        .all(city) as unknown as TournamentRow[];
+    }
+    return db.prepare(`SELECT * FROM tournaments ORDER BY startDate ASC`).all() as unknown as TournamentRow[];
+  },
+  updateStatus(id: string, status: string) {
+    db.prepare(`UPDATE tournaments SET status = ? WHERE id = ?`).run(status, id);
+  },
+};
+
+export const TournamentRegistrations = {
+  create(input: { tournamentId: string; userId: string }): TournamentRegistrationRow {
+    const row: TournamentRegistrationRow = {
+      id: newId("treg"),
+      tournamentId: input.tournamentId,
+      userId: input.userId,
+      createdAt: nowIso(),
+    };
+    db.prepare(`INSERT INTO tournament_registrations (id,tournamentId,userId,createdAt) VALUES (?,?,?,?)`).run(
+      row.id,
+      row.tournamentId,
+      row.userId,
+      row.createdAt
+    );
+    return row;
+  },
+  listByTournament(tournamentId: string): TournamentRegistrationRow[] {
+    return db
+      .prepare(`SELECT * FROM tournament_registrations WHERE tournamentId = ?`)
+      .all(tournamentId) as unknown as TournamentRegistrationRow[];
+  },
+  isRegistered(tournamentId: string, userId: string): boolean {
+    const row = db
+      .prepare(`SELECT id FROM tournament_registrations WHERE tournamentId = ? AND userId = ?`)
+      .get(tournamentId, userId);
+    return !!row;
   },
 };

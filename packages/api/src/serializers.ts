@@ -6,6 +6,7 @@ import type {
   MatchRow,
   PaymentRow,
   SponsorshipRow,
+  TournamentRow,
   UserRow,
 } from "./repositories";
 
@@ -35,6 +36,7 @@ export function publicCourt(c: CourtRow) {
     name: c.name,
     type: c.type,
     indoor: !!c.indoor,
+    lighting: !!c.lighting,
     pricePerHourUsd: c.pricePerHourUsd,
   };
 }
@@ -49,6 +51,8 @@ export function publicClub(c: ClubRow, courts: CourtRow[] = []) {
     city: c.city,
     status: c.status,
     visibilityPlan: c.visibilityPlan,
+    openHour: c.openHour,
+    closeHour: c.closeHour,
     createdAt: c.createdAt,
     courts: courts.map(publicCourt),
   };
@@ -79,6 +83,8 @@ export function publicMatch(
     levelMin: m.levelMin,
     levelMax: m.levelMax,
     status: m.status,
+    winnerTeam: m.winnerTeam,
+    completedAt: m.completedAt,
     createdAt: m.createdAt,
     players: players.map((p) => ({
       id: p.id,
@@ -98,4 +104,15 @@ export function publicPayment(p: PaymentRow) {
 
 export function publicSponsorship(s: SponsorshipRow) {
   return { ...s };
+}
+
+export function publicTournament(
+  t: TournamentRow,
+  extra: { registeredCount?: number; isRegistered?: boolean } = {}
+) {
+  return {
+    ...t,
+    registeredCount: extra.registeredCount ?? 0,
+    isRegistered: extra.isRegistered ?? false,
+  };
 }

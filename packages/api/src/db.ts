@@ -51,6 +51,8 @@ db.exec(`
     city TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING',
     visibilityPlan TEXT NOT NULL DEFAULT 'NONE',
+    openHour INTEGER NOT NULL DEFAULT 8,
+    closeHour INTEGER NOT NULL DEFAULT 22,
     createdAt TEXT NOT NULL
   );
 
@@ -60,6 +62,7 @@ db.exec(`
     name TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'CRISTAL',
     indoor INTEGER NOT NULL DEFAULT 0,
+    lighting INTEGER NOT NULL DEFAULT 0,
     pricePerHourUsd REAL NOT NULL
   );
 
@@ -83,6 +86,8 @@ db.exec(`
     levelMin REAL NOT NULL DEFAULT 1.0,
     levelMax REAL NOT NULL DEFAULT 7.0,
     status TEXT NOT NULL DEFAULT 'OPEN',
+    winnerTeam INTEGER,
+    completedAt TEXT,
     createdAt TEXT NOT NULL
   );
 
@@ -120,6 +125,30 @@ db.exec(`
     endDate TEXT,
     status TEXT NOT NULL DEFAULT 'PENDING',
     amountPaidUsd REAL NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS tournaments (
+    id TEXT PRIMARY KEY,
+    createdBy TEXT NOT NULL REFERENCES users(id),
+    clubId TEXT REFERENCES clubs(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    city TEXT NOT NULL,
+    levelMin REAL NOT NULL DEFAULT 1.0,
+    levelMax REAL NOT NULL DEFAULT 8.0,
+    startDate TEXT NOT NULL,
+    endDate TEXT,
+    maxPlayers INTEGER NOT NULL DEFAULT 16,
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    createdAt TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS tournament_registrations (
+    id TEXT PRIMARY KEY,
+    tournamentId TEXT NOT NULL REFERENCES tournaments(id),
+    userId TEXT NOT NULL REFERENCES users(id),
+    createdAt TEXT NOT NULL,
+    UNIQUE(tournamentId, userId)
   );
 `);
 
