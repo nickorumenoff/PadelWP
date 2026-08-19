@@ -36,16 +36,15 @@ export class ApiClient {
     method: string = "GET",
     body?: unknown
   ): Promise<T> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+    const headers: Record<string, string> = {};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     const token = this.getToken?.();
     if (token) headers.Authorization = `Bearer ${token}`;
 
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
     if (!res.ok) {
