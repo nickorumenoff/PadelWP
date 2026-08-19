@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Bookings, Clubs, Courts } from "../repositories";
 import { requireAuth } from "../auth";
-import { publicClub, publicCourt } from "../serializers";
+import { publicBooking, publicClub, publicCourt } from "../serializers";
 
 const createClubSchema = z.object({
   name: z.string().min(2),
@@ -11,11 +11,25 @@ const createClubSchema = z.object({
   city: z.string().min(2),
 });
 
+const updateClubHoursSchema = z.object({
+  openHour: z.number().int().min(0).max(23),
+  closeHour: z.number().int().min(1).max(24),
+});
+
 const createCourtSchema = z.object({
   name: z.string().min(1),
   type: z.enum(["CRISTAL", "MURO", "PANORAMICA"]).default("CRISTAL"),
   indoor: z.boolean().default(false),
+  lighting: z.boolean().default(false),
   pricePerHourUsd: z.number().positive(),
+});
+
+const updateCourtSchema = z.object({
+  name: z.string().min(1).optional(),
+  type: z.enum(["CRISTAL", "MURO", "PANORAMICA"]).optional(),
+  indoor: z.boolean().optional(),
+  lighting: z.boolean().optional(),
+  pricePerHourUsd: z.number().positive().optional(),
 });
 
 const planOrder: Record<string, number> = { PREMIUM: 0, FEATURED: 1, BASIC: 2, NONE: 3 };
@@ -63,8 +77,64 @@ export default async function clubRoutes(app: FastifyInstance) {
     return reply.send(publicCourt(court));
   });
 
-  // Disponibilidad de una pista para una fecha: genera franjas de 1h de 8:00 a 22:00
-  // marcando como BOOKED las que ya tengan una reserva.
+  // Actualiza atributos de una pista (nombre, tipo/material, techada, iluminación, precio).
+  app.patch("/courts/:courtId", { preHandler: requireAuth }, async (req, reply) => {
+    const { courtId } = req.params as { courtId: string };
+    const parsed = updateCourtSchema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+
+    const court = Courts.findById(courtId);
+    if (!court) return reply.status(404).send({ error: "Pista no encontrada" });
+
+    const club = Clubs.findById(court.clubId);
+    const userId = (req as any).userId as string;
+    if (!club || club.ownerId !== userId) {
+      return reply.status(403).send({ error: "Solo el dueño del club puede editar esta pista" });
+    }
+
+    const updated = Courts.update(courtId, parsed.data);
+    return reply.send(publicCourt(updated!));
+  });
+
+  // Actualiza el horario de apertura/cierre del club (usado para generar la disponibilidad).
+  app.patch("/clubs/:id/hours", { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = updateClubHoursSchema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+
+    const club = Clubs.findById(id);
+    if (!club) return reply.status(404).send({ error: "Club no encontrado" });
+
+    const userId = (req as any).userId as string;
+    if (club.ownerId !== userId) {
+      return reply.status(403).send({ error: "Solo el dueño del club puede editar el horario" });
+    }
+    if (parsed.data.closeHour <= parsed.data.openHour) {
+      return reply.status(400).send({ error: "La hora de cierre debe ser posterior a la de apertura" });
+    }
+
+    const updated = Clubs.updateHours(id, parsed.data.openHour, parsed.data.closeHour);
+    return reply.send(publicClub(updated!, Courts.listByClub(id)));
+  });
+
+  // Lista todas las reservas de las pistas del club, para que el dueño las gestione.
+  app.get("/clubs/:id/bookings", { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const club = Clubs.findById(id);
+    if (!club) return reply.status(404).send({ error: "Club no encontrado" });
+
+    const userId = (req as any).userId as string;
+    if (club.ownerId !== userId) {
+      return reply.status(403).send({ error: "Solo el dueño del club puede ver sus reservas" });
+    }
+
+    const bookings = Bookings.listByClub(id);
+    return reply.send(bookings.map(publicBooking));
+  });
+
+  // Disponibilidad de una pista para una fecha: genera franjas de 1h dentro del
+  // horario que el club haya publicado (openHour-closeHour), marcando como
+  // BOOKED las que ya tengan una reserva.
   app.get("/courts/:courtId/availability", async (req, reply) => {
     const { courtId } = req.params as { courtId: string };
     const { date } = req.query as { date?: string };
@@ -72,12 +142,16 @@ export default async function clubRoutes(app: FastifyInstance) {
 
     const court = Courts.findById(courtId);
     if (!court) return reply.status(404).send({ error: "Pista no encontrada" });
+    const club = Clubs.findById(court.clubId);
 
     const existing = Bookings.listByCourtAndDate(courtId, date);
     const byStart = new Map(existing.map((b) => [b.startTime, b]));
 
+    const openHour = club?.openHour ?? 8;
+    const closeHour = club?.closeHour ?? 22;
+
     const slots = [];
-    for (let hour = 8; hour < 22; hour++) {
+    for (let hour = openHour; hour < closeHour; hour++) {
       const startTime = `${String(hour).padStart(2, "0")}:00`;
       const endTime = `${String(hour + 1).padStart(2, "0")}:00`;
       const booking = byStart.get(startTime);

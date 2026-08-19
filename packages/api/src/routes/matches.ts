@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { computeLevelAfterMatch } from "@padel-ve/shared";
 import { Bookings, Clubs, Courts, MatchPlayers, Matches, Users } from "../repositories";
 import { requireAuth } from "../auth";
 import { publicBooking, publicClub, publicCourt, publicMatch } from "../serializers";
@@ -14,6 +15,10 @@ const createMatchSchema = z.object({
 
 const joinMatchSchema = z.object({
   team: z.union([z.literal(1), z.literal(2)]),
+});
+
+const resultSchema = z.object({
+  winnerTeam: z.union([z.literal(1), z.literal(2)]),
 });
 
 function serializeFull(matchId: string) {
@@ -103,5 +108,62 @@ export default async function matchRoutes(app: FastifyInstance) {
     }
 
     return reply.send(serializeFull(id));
+  });
+
+  // Partidas en las que el usuario autenticado participa (cualquier estado),
+  // para que pueda ver su historial y registrar el resultado de las que jugó.
+  app.get("/matches/mine", { preHandler: requireAuth }, async (req, reply) => {
+    const userId = (req as any).userId as string;
+    const matches = Matches.listForUser(userId);
+    return reply.send(matches.map((m) => serializeFull(m.id)));
+  });
+
+  // Registra el resultado de una partida completa (4 jugadores) y ajusta el
+  // nivel de los 4 jugadores tipo Elo, según si ganaron/perdieron y el nivel
+  // de sus rivales. Solo un jugador de la propia partida puede reportarlo.
+  app.post("/matches/:id/result", { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = resultSchema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+    const userId = (req as any).userId as string;
+
+    const match = Matches.findById(id);
+    if (!match) return reply.status(404).send({ error: "Partida no encontrada" });
+    if (match.status === "COMPLETED") {
+      return reply.status(409).send({ error: "Esta partida ya tiene un resultado registrado" });
+    }
+    if (match.status !== "FULL") {
+      return reply.status(409).send({ error: "La partida necesita 4 jugadores confirmados para reportar un resultado" });
+    }
+
+    const players = MatchPlayers.listByMatch(id);
+    if (!players.some((p) => p.userId === userId)) {
+      return reply.status(403).send({ error: "Solo un jugador de esta partida puede reportar el resultado" });
+    }
+    if (players.length < 4) {
+      return reply.status(409).send({ error: "Faltan jugadores para poder reportar un resultado" });
+    }
+
+    const { winnerTeam } = parsed.data;
+
+    const usersById = new Map(players.map((p) => [p.userId, Users.findById(p.userId)!]));
+    const team1 = players.filter((p) => p.team === 1);
+    const team2 = players.filter((p) => p.team === 2);
+    const avgLevel = (team: typeof players) =>
+      team.reduce((sum, p) => sum + usersById.get(p.userId)!.level, 0) / team.length;
+    const team1Avg = avgLevel(team1);
+    const team2Avg = avgLevel(team2);
+
+    for (const p of players) {
+      const onTeam1 = p.team === 1;
+      const opponentAvgLevel = onTeam1 ? team2Avg : team1Avg;
+      const won = onTeam1 ? winnerTeam === 1 : winnerTeam === 2;
+      const currentLevel = usersById.get(p.userId)!.level;
+      const newLevel = computeLevelAfterMatch({ currentLevel, opponentAvgLevel, won });
+      Users.updateLevel(p.userId, newLevel);
+    }
+
+    const updated = Matches.setResult(id, winnerTeam);
+    return reply.send(serializeFull(updated!.id));
   });
 }
