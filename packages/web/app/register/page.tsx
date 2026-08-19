@@ -33,6 +33,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [city, setCity] = useState("Caracas");
+  const [gender, setGender] = useState<"MASCULINO" | "FEMENINO" | "">("");
 
   const [dominantArm, setDominantArm] = useState<DominantArm>("DERECHA");
   const [frequency, setFrequency] = useState<PlayFrequency>("SEMANAL");
@@ -58,6 +59,7 @@ export default function RegisterPage() {
         email,
         password,
         city,
+        gender: gender || undefined,
         dominantArm,
         frequency,
         yearsPlaying,
@@ -112,6 +114,14 @@ export default function RegisterPage() {
             <div>
               <label className="label">Ciudad</label>
               <input className="input" required value={city} onChange={(e) => setCity(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Género (opcional, para torneos por categoría)</label>
+              <select className="input" value={gender} onChange={(e) => setGender(e.target.value as "MASCULINO" | "FEMENINO" | "")}>
+                <option value="">Prefiero no decirlo</option>
+                <option value="MASCULINO">Masculino</option>
+                <option value="FEMENINO">Femenino</option>
+              </select>
             </div>
             <button type="submit" className="btn-primary w-full">
               Continuar a la encuesta de nivel
