@@ -51,3 +51,15 @@ body {
 .badge-blue {
   @apply badge bg-brand-blue-50 text-brand-blue;
 }
+
+.badge-yellow {
+  @apply badge bg-amber-50 text-amber-700;
+}
+
+.badge-purple {
+  @apply badge bg-violet-50 text-violet-700;
+}
+
+.badge-gray {
+  @apply badge bg-mist text-muted;
+}
