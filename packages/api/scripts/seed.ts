@@ -2,7 +2,7 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { computePlayerLevel, type SkillSurvey } from "@padel-ve/shared";
 import { db } from "../src/db";
-import { Bookings, Clubs, Courts, MatchPlayers, Matches, Sponsorships, Users } from "../src/repositories";
+import { Bookings, Clubs, Courts, MatchPlayers, Matches, Sponsorships, Tournaments, Users } from "../src/repositories";
 
 async function main() {
   const passwordHash = await bcrypt.hash("padel123", 10);
@@ -64,7 +64,22 @@ async function main() {
 
   let court = Courts.listByClub(club.id)[0];
   if (!court) {
-    court = Courts.create({ clubId: club.id, name: "Pista 1", type: "PANORAMICA", indoor: false, pricePerHourUsd: 25 });
+    court = Courts.create({
+      clubId: club.id,
+      name: "Pista 1",
+      type: "PANORAMICA",
+      indoor: false,
+      lighting: true,
+      pricePerHourUsd: 25,
+    });
+    Courts.create({
+      clubId: club.id,
+      name: "Pista 2 (techada)",
+      type: "CRISTAL",
+      indoor: true,
+      lighting: true,
+      pricePerHourUsd: 28,
+    });
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -92,6 +107,23 @@ async function main() {
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + 30);
     Sponsorships.activate(sponsorship.id, endDate.toISOString());
+  }
+
+  const existingTournament = db.prepare(`SELECT * FROM tournaments WHERE name = ?`).get("Copa Padel WP Caracas");
+  if (!existingTournament) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() + 14);
+    Tournaments.create({
+      createdBy: admin.id,
+      clubId: club.id,
+      name: "Copa Padel WP Caracas",
+      description: "Torneo abierto por categorías en Las Mercedes Pádel Club.",
+      city: "Caracas",
+      levelMin: 1,
+      levelMax: 5,
+      startDate: startDate.toISOString().slice(0, 10),
+      maxPlayers: 16,
+    });
   }
 
   console.log("Seed completado. Usuarios de prueba (password: padel123):");
