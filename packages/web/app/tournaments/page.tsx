@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { Tournament } from "@padel-ve/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/app/providers";
@@ -83,7 +84,9 @@ export default function TournamentsPage() {
             <div key={t.id} className="card p-5">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-medium text-ink">{t.name}</p>
+                  <Link href={`/tournaments/${t.id}`} className="font-medium text-ink hover:text-brand-blue hover:underline">
+                    {t.name}
+                  </Link>
                   <p className="text-sm text-muted">{t.city}</p>
                 </div>
                 <span className="badge-blue">
@@ -123,6 +126,13 @@ export default function TournamentsPage() {
                   </button>
                 )}
               </div>
+
+              <Link
+                href={`/tournaments/${t.id}`}
+                className="mt-3 block text-center text-xs font-medium text-brand-blue hover:underline"
+              >
+                Ver categorías y llave del torneo
+              </Link>
             </div>
           );
         })}
