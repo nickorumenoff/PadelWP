@@ -13,6 +13,7 @@ export interface User {
    * Se calcula a partir de la encuesta de perfil (ver computePlayerLevel en ./level).
    */
   level: number;
+  gender?: "MASCULINO" | "FEMENINO" | null;
   dominantArm?: DominantArm | null;
   frequency?: PlayFrequency | null;
   yearsPlaying?: number | null;
@@ -152,4 +153,100 @@ export interface Tournament {
   createdAt: string;
   registeredCount?: number;
   isRegistered?: boolean;
+}
+
+export type GenderCategory = "MASCULINO" | "FEMENINO" | "MIXTO";
+export type CategoryStatus = "REGISTRATION" | "GROUPS" | "KNOCKOUT" | "COMPLETED";
+
+/**
+ * Categoría de un torneo: se juega por género y nivel (1-8). `bracketSize`
+ * es la cantidad de parejas que llegan a la llave de eliminación directa
+ * (numGroups = bracketSize / 2, ya que avanzan los 2 mejores de cada grupo).
+ */
+export interface TournamentCategory {
+  id: string;
+  tournamentId: string;
+  genderCategory: GenderCategory;
+  level: number;
+  bracketSize: number;
+  status: CategoryStatus;
+  createdAt: string;
+  registeredCount?: number;
+  pairCount?: number;
+  isRegistered?: boolean;
+}
+
+export interface CategoryRegistration {
+  id: string;
+  categoryId: string;
+  userId: string;
+  pairId?: string | null;
+  createdAt: string;
+  user?: User;
+}
+
+export interface TournamentPair {
+  id: string;
+  categoryId: string;
+  player1Id: string;
+  player2Id: string;
+  groupId?: string | null;
+  createdAt: string;
+  player1?: User;
+  player2?: User;
+}
+
+export interface GroupStanding {
+  pairId: string;
+  wins: number;
+  losses: number;
+  setsFor: number;
+  setsAgainst: number;
+  setDiff: number;
+}
+
+export interface GroupMatch {
+  id: string;
+  categoryId: string;
+  groupId: string;
+  pairAId: string;
+  pairBId: string;
+  setsA?: number | null;
+  setsB?: number | null;
+  winnerPairId?: string | null;
+  status: "PENDING" | "COMPLETED";
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export interface TournamentGroup {
+  id: string;
+  categoryId: string;
+  groupIndex: number;
+  createdAt: string;
+  pairs: TournamentPair[];
+  matches: GroupMatch[];
+  standings: GroupStanding[];
+}
+
+export interface BracketMatch {
+  id: string;
+  categoryId: string;
+  round: number;
+  slot: number;
+  pairAId?: string | null;
+  pairBId?: string | null;
+  setsA?: number | null;
+  setsB?: number | null;
+  winnerPairId?: string | null;
+  status: "PENDING" | "COMPLETED";
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export interface CategoryDetail extends TournamentCategory {
+  registrations: CategoryRegistration[];
+  pairs: TournamentPair[];
+  groups: TournamentGroup[];
+  bracket: BracketMatch[];
 }

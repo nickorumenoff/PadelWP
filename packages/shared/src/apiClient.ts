@@ -1,12 +1,15 @@
 import type {
   AuthResponse,
   Booking,
+  CategoryDetail,
   Club,
   Court,
   Match,
   Payment,
   Sponsorship,
   Tournament,
+  TournamentCategory,
+  TournamentPair,
   User,
 } from "./types";
 
@@ -60,6 +63,7 @@ export class ApiClient {
     password: string;
     role?: string;
     city?: string;
+    gender?: "MASCULINO" | "FEMENINO";
     dominantArm: "DERECHA" | "IZQUIERDA";
     frequency: "DIARIO" | "VARIAS_VECES_SEMANA" | "SEMANAL" | "QUINCENAL" | "MENSUAL" | "OCASIONAL";
     yearsPlaying: number;
@@ -168,8 +172,52 @@ export class ApiClient {
     return this.request<Tournament>("/tournaments", "POST", input);
   }
 
+  getTournament(id: string) {
+    return this.request<Tournament>(`/tournaments/${id}`);
+  }
+
   registerForTournament(tournamentId: string) {
     return this.request<Tournament>(`/tournaments/${tournamentId}/register`, "POST");
+  }
+
+  // Categorías (género + nivel + llave) dentro de un torneo
+  listCategories(tournamentId: string) {
+    return this.request<TournamentCategory[]>(`/tournaments/${tournamentId}/categories`);
+  }
+
+  createCategory(
+    tournamentId: string,
+    input: { genderCategory: "MASCULINO" | "FEMENINO" | "MIXTO"; level: number; bracketSize: number }
+  ) {
+    return this.request<TournamentCategory>(`/tournaments/${tournamentId}/categories`, "POST", input);
+  }
+
+  getCategoryDetail(categoryId: string) {
+    return this.request<CategoryDetail>(`/tournament-categories/${categoryId}`);
+  }
+
+  registerForCategory(categoryId: string) {
+    return this.request<CategoryDetail>(`/tournament-categories/${categoryId}/register`, "POST");
+  }
+
+  createPair(categoryId: string, input: { player1Id: string; player2Id: string }) {
+    return this.request<TournamentPair>(`/tournament-categories/${categoryId}/pairs`, "POST", input);
+  }
+
+  generateGroups(categoryId: string) {
+    return this.request<CategoryDetail>(`/tournament-categories/${categoryId}/generate-groups`, "POST");
+  }
+
+  submitGroupMatchResult(matchId: string, input: { winnerPairId: string; setsA?: number; setsB?: number }) {
+    return this.request<CategoryDetail>(`/group-matches/${matchId}/result`, "POST", input);
+  }
+
+  generateKnockout(categoryId: string) {
+    return this.request<CategoryDetail>(`/tournament-categories/${categoryId}/generate-knockout`, "POST");
+  }
+
+  submitBracketMatchResult(matchId: string, input: { winnerPairId: string; setsA?: number; setsB?: number }) {
+    return this.request<CategoryDetail>(`/bracket-matches/${matchId}/result`, "POST", input);
   }
 
   // Payments
