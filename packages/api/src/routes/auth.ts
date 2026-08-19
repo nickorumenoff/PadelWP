@@ -14,6 +14,7 @@ const registerSchema = z.object({
   password: z.string().min(6),
   role: z.enum(["PLAYER", "CLUB_ADMIN", "SPONSOR"]).optional(),
   city: z.string().optional(),
+  gender: z.enum(["MASCULINO", "FEMENINO"]).optional(),
   dominantArm: z.enum(["DERECHA", "IZQUIERDA"]),
   frequency: z.enum([
     "DIARIO",
@@ -39,7 +40,7 @@ export default async function authRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
-    const { name, email, password, role, city, dominantArm, frequency, yearsPlaying, selfAssessment, competes } =
+    const { name, email, password, role, city, gender, dominantArm, frequency, yearsPlaying, selfAssessment, competes } =
       parsed.data;
 
     const existing = Users.findByEmail(email);
@@ -57,6 +58,7 @@ export default async function authRoutes(app: FastifyInstance) {
       role: role ?? "PLAYER",
       city,
       level,
+      gender,
       dominantArm,
       frequency,
       yearsPlaying,
