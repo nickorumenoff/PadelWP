@@ -1,14 +1,20 @@
 import type {
   BookingRow,
+  BracketMatchRow,
   ClubRow,
   CourtRow,
+  GroupMatchRow,
   MatchPlayerRow,
   MatchRow,
   PaymentRow,
   SponsorshipRow,
+  TournamentCategoryRow,
+  TournamentGroupRow,
+  TournamentPairRow,
   TournamentRow,
   UserRow,
 } from "./repositories";
+import type { GroupStanding } from "./bracket";
 
 export function publicUser(u: UserRow) {
   return {
@@ -18,6 +24,7 @@ export function publicUser(u: UserRow) {
     phone: u.phone,
     role: u.role,
     level: u.level,
+    gender: u.gender,
     dominantArm: u.dominantArm,
     frequency: u.frequency,
     yearsPlaying: u.yearsPlaying,
@@ -114,5 +121,47 @@ export function publicTournament(
     ...t,
     registeredCount: extra.registeredCount ?? 0,
     isRegistered: extra.isRegistered ?? false,
+  };
+}
+
+export function publicCategory(
+  c: TournamentCategoryRow,
+  extra: { registeredCount?: number; pairCount?: number; isRegistered?: boolean } = {}
+) {
+  return {
+    ...c,
+    registeredCount: extra.registeredCount ?? 0,
+    pairCount: extra.pairCount ?? 0,
+    isRegistered: extra.isRegistered ?? false,
+  };
+}
+
+export function publicPair(p: TournamentPairRow, player1?: UserRow, player2?: UserRow) {
+  return {
+    ...p,
+    player1: player1 ? publicUser(player1) : undefined,
+    player2: player2 ? publicUser(player2) : undefined,
+  };
+}
+
+export function publicGroupMatch(m: GroupMatchRow) {
+  return { ...m };
+}
+
+export function publicBracketMatch(m: BracketMatchRow) {
+  return { ...m };
+}
+
+export function publicGroup(
+  g: TournamentGroupRow,
+  pairs: ReturnType<typeof publicPair>[],
+  matches: GroupMatchRow[],
+  standings: GroupStanding[]
+) {
+  return {
+    ...g,
+    pairs,
+    matches: matches.map(publicGroupMatch),
+    standings,
   };
 }

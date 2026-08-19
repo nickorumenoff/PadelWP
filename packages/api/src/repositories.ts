@@ -10,6 +10,7 @@ export interface UserRow {
   phone: string | null;
   role: string;
   level: number;
+  gender: string | null;
   dominantArm: string | null;
   frequency: string | null;
   yearsPlaying: number | null;
@@ -126,6 +127,69 @@ export interface TournamentRegistrationRow {
   createdAt: string;
 }
 
+export interface TournamentCategoryRow {
+  id: string;
+  tournamentId: string;
+  genderCategory: string;
+  level: number;
+  bracketSize: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface CategoryRegistrationRow {
+  id: string;
+  categoryId: string;
+  userId: string;
+  pairId: string | null;
+  createdAt: string;
+}
+
+export interface TournamentPairRow {
+  id: string;
+  categoryId: string;
+  player1Id: string;
+  player2Id: string;
+  groupId: string | null;
+  createdAt: string;
+}
+
+export interface TournamentGroupRow {
+  id: string;
+  categoryId: string;
+  groupIndex: number;
+  createdAt: string;
+}
+
+export interface GroupMatchRow {
+  id: string;
+  categoryId: string;
+  groupId: string;
+  pairAId: string;
+  pairBId: string;
+  setsA: number | null;
+  setsB: number | null;
+  winnerPairId: string | null;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface BracketMatchRow {
+  id: string;
+  categoryId: string;
+  round: number;
+  slot: number;
+  pairAId: string | null;
+  pairBId: string | null;
+  setsA: number | null;
+  setsB: number | null;
+  winnerPairId: string | null;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
 // ---------- Users ----------
 
 export const Users = {
@@ -136,6 +200,7 @@ export const Users = {
     role: string;
     city?: string;
     level?: number;
+    gender?: string;
     dominantArm?: string;
     frequency?: string;
     yearsPlaying?: number;
@@ -150,6 +215,7 @@ export const Users = {
       phone: null,
       role: input.role,
       level: input.level ?? 8.0,
+      gender: input.gender ?? null,
       dominantArm: input.dominantArm ?? null,
       frequency: input.frequency ?? null,
       yearsPlaying: input.yearsPlaying ?? null,
@@ -160,8 +226,8 @@ export const Users = {
       createdAt: nowIso(),
     };
     db.prepare(
-      `INSERT INTO users (id,name,email,passwordHash,phone,role,level,dominantArm,frequency,yearsPlaying,selfAssessment,competes,city,photoUrl,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO users (id,name,email,passwordHash,phone,role,level,gender,dominantArm,frequency,yearsPlaying,selfAssessment,competes,city,photoUrl,createdAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       row.id,
       row.name,
@@ -170,6 +236,7 @@ export const Users = {
       row.phone,
       row.role,
       row.level,
+      row.gender,
       row.dominantArm,
       row.frequency,
       row.yearsPlaying,
@@ -666,5 +733,244 @@ export const TournamentRegistrations = {
       .prepare(`SELECT id FROM tournament_registrations WHERE tournamentId = ? AND userId = ?`)
       .get(tournamentId, userId);
     return !!row;
+  },
+};
+
+// ---------- Categorías de torneo (género + nivel + tamaño de llave) ----------
+
+export const TournamentCategories = {
+  create(input: { tournamentId: string; genderCategory: string; level: number; bracketSize: number }): TournamentCategoryRow {
+    const row: TournamentCategoryRow = {
+      id: newId("tcat"),
+      tournamentId: input.tournamentId,
+      genderCategory: input.genderCategory,
+      level: input.level,
+      bracketSize: input.bracketSize,
+      status: "REGISTRATION",
+      createdAt: nowIso(),
+    };
+    db.prepare(
+      `INSERT INTO tournament_categories (id,tournamentId,genderCategory,level,bracketSize,status,createdAt) VALUES (?,?,?,?,?,?,?)`
+    ).run(row.id, row.tournamentId, row.genderCategory, row.level, row.bracketSize, row.status, row.createdAt);
+    return row;
+  },
+  findById(id: string): TournamentCategoryRow | undefined {
+    return db.prepare(`SELECT * FROM tournament_categories WHERE id = ?`).get(id) as TournamentCategoryRow | undefined;
+  },
+  listByTournament(tournamentId: string): TournamentCategoryRow[] {
+    return db
+      .prepare(`SELECT * FROM tournament_categories WHERE tournamentId = ? ORDER BY level ASC`)
+      .all(tournamentId) as unknown as TournamentCategoryRow[];
+  },
+  updateStatus(id: string, status: string) {
+    db.prepare(`UPDATE tournament_categories SET status = ? WHERE id = ?`).run(status, id);
+  },
+};
+
+export const CategoryRegistrations = {
+  create(input: { categoryId: string; userId: string }): CategoryRegistrationRow {
+    const row: CategoryRegistrationRow = {
+      id: newId("creg"),
+      categoryId: input.categoryId,
+      userId: input.userId,
+      pairId: null,
+      createdAt: nowIso(),
+    };
+    db.prepare(`INSERT INTO tournament_category_registrations (id,categoryId,userId,pairId,createdAt) VALUES (?,?,?,?,?)`).run(
+      row.id,
+      row.categoryId,
+      row.userId,
+      row.pairId,
+      row.createdAt
+    );
+    return row;
+  },
+  listByCategory(categoryId: string): CategoryRegistrationRow[] {
+    return db
+      .prepare(`SELECT * FROM tournament_category_registrations WHERE categoryId = ? ORDER BY createdAt ASC`)
+      .all(categoryId) as unknown as CategoryRegistrationRow[];
+  },
+  isRegistered(categoryId: string, userId: string): boolean {
+    const row = db
+      .prepare(`SELECT id FROM tournament_category_registrations WHERE categoryId = ? AND userId = ?`)
+      .get(categoryId, userId);
+    return !!row;
+  },
+  setPair(categoryId: string, userId: string, pairId: string) {
+    db.prepare(`UPDATE tournament_category_registrations SET pairId = ? WHERE categoryId = ? AND userId = ?`).run(
+      pairId,
+      categoryId,
+      userId
+    );
+  },
+};
+
+export const TournamentPairs = {
+  create(input: { categoryId: string; player1Id: string; player2Id: string }): TournamentPairRow {
+    const row: TournamentPairRow = {
+      id: newId("pair"),
+      categoryId: input.categoryId,
+      player1Id: input.player1Id,
+      player2Id: input.player2Id,
+      groupId: null,
+      createdAt: nowIso(),
+    };
+    db.prepare(`INSERT INTO tournament_pairs (id,categoryId,player1Id,player2Id,groupId,createdAt) VALUES (?,?,?,?,?,?)`).run(
+      row.id,
+      row.categoryId,
+      row.player1Id,
+      row.player2Id,
+      row.groupId,
+      row.createdAt
+    );
+    return row;
+  },
+  findById(id: string): TournamentPairRow | undefined {
+    return db.prepare(`SELECT * FROM tournament_pairs WHERE id = ?`).get(id) as TournamentPairRow | undefined;
+  },
+  listByCategory(categoryId: string): TournamentPairRow[] {
+    return db.prepare(`SELECT * FROM tournament_pairs WHERE categoryId = ?`).all(categoryId) as unknown as TournamentPairRow[];
+  },
+  setGroup(id: string, groupId: string) {
+    db.prepare(`UPDATE tournament_pairs SET groupId = ? WHERE id = ?`).run(groupId, id);
+  },
+};
+
+export const TournamentGroups = {
+  create(input: { categoryId: string; groupIndex: number }): TournamentGroupRow {
+    const row: TournamentGroupRow = {
+      id: newId("grp"),
+      categoryId: input.categoryId,
+      groupIndex: input.groupIndex,
+      createdAt: nowIso(),
+    };
+    db.prepare(`INSERT INTO tournament_groups (id,categoryId,groupIndex,createdAt) VALUES (?,?,?,?)`).run(
+      row.id,
+      row.categoryId,
+      row.groupIndex,
+      row.createdAt
+    );
+    return row;
+  },
+  listByCategory(categoryId: string): TournamentGroupRow[] {
+    return db
+      .prepare(`SELECT * FROM tournament_groups WHERE categoryId = ? ORDER BY groupIndex ASC`)
+      .all(categoryId) as unknown as TournamentGroupRow[];
+  },
+};
+
+export const GroupMatches = {
+  create(input: { categoryId: string; groupId: string; pairAId: string; pairBId: string }): GroupMatchRow {
+    const row: GroupMatchRow = {
+      id: newId("gmatch"),
+      categoryId: input.categoryId,
+      groupId: input.groupId,
+      pairAId: input.pairAId,
+      pairBId: input.pairBId,
+      setsA: null,
+      setsB: null,
+      winnerPairId: null,
+      status: "PENDING",
+      createdAt: nowIso(),
+      completedAt: null,
+    };
+    db.prepare(
+      `INSERT INTO group_matches (id,categoryId,groupId,pairAId,pairBId,setsA,setsB,winnerPairId,status,createdAt,completedAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      row.id,
+      row.categoryId,
+      row.groupId,
+      row.pairAId,
+      row.pairBId,
+      row.setsA,
+      row.setsB,
+      row.winnerPairId,
+      row.status,
+      row.createdAt,
+      row.completedAt
+    );
+    return row;
+  },
+  findById(id: string): GroupMatchRow | undefined {
+    return db.prepare(`SELECT * FROM group_matches WHERE id = ?`).get(id) as GroupMatchRow | undefined;
+  },
+  listByGroup(groupId: string): GroupMatchRow[] {
+    return db.prepare(`SELECT * FROM group_matches WHERE groupId = ?`).all(groupId) as unknown as GroupMatchRow[];
+  },
+  listByCategory(categoryId: string): GroupMatchRow[] {
+    return db.prepare(`SELECT * FROM group_matches WHERE categoryId = ?`).all(categoryId) as unknown as GroupMatchRow[];
+  },
+  setResult(id: string, winnerPairId: string, setsA?: number, setsB?: number): GroupMatchRow | undefined {
+    db.prepare(
+      `UPDATE group_matches SET status = 'COMPLETED', winnerPairId = ?, setsA = ?, setsB = ?, completedAt = ? WHERE id = ?`
+    ).run(winnerPairId, setsA ?? null, setsB ?? null, nowIso(), id);
+    return GroupMatches.findById(id);
+  },
+};
+
+export const BracketMatches = {
+  create(input: {
+    categoryId: string;
+    round: number;
+    slot: number;
+    pairAId?: string | null;
+    pairBId?: string | null;
+  }): BracketMatchRow {
+    const row: BracketMatchRow = {
+      id: newId("bmatch"),
+      categoryId: input.categoryId,
+      round: input.round,
+      slot: input.slot,
+      pairAId: input.pairAId ?? null,
+      pairBId: input.pairBId ?? null,
+      setsA: null,
+      setsB: null,
+      winnerPairId: null,
+      status: "PENDING",
+      createdAt: nowIso(),
+      completedAt: null,
+    };
+    db.prepare(
+      `INSERT INTO bracket_matches (id,categoryId,round,slot,pairAId,pairBId,setsA,setsB,winnerPairId,status,createdAt,completedAt)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      row.id,
+      row.categoryId,
+      row.round,
+      row.slot,
+      row.pairAId,
+      row.pairBId,
+      row.setsA,
+      row.setsB,
+      row.winnerPairId,
+      row.status,
+      row.createdAt,
+      row.completedAt
+    );
+    return row;
+  },
+  findById(id: string): BracketMatchRow | undefined {
+    return db.prepare(`SELECT * FROM bracket_matches WHERE id = ?`).get(id) as BracketMatchRow | undefined;
+  },
+  findByCategoryRoundSlot(categoryId: string, round: number, slot: number): BracketMatchRow | undefined {
+    return db
+      .prepare(`SELECT * FROM bracket_matches WHERE categoryId = ? AND round = ? AND slot = ?`)
+      .get(categoryId, round, slot) as BracketMatchRow | undefined;
+  },
+  listByCategory(categoryId: string): BracketMatchRow[] {
+    return db
+      .prepare(`SELECT * FROM bracket_matches WHERE categoryId = ? ORDER BY round ASC, slot ASC`)
+      .all(categoryId) as unknown as BracketMatchRow[];
+  },
+  setPairSlot(id: string, position: "A" | "B", pairId: string) {
+    if (position === "A") db.prepare(`UPDATE bracket_matches SET pairAId = ? WHERE id = ?`).run(pairId, id);
+    else db.prepare(`UPDATE bracket_matches SET pairBId = ? WHERE id = ?`).run(pairId, id);
+  },
+  setResult(id: string, winnerPairId: string, setsA?: number, setsB?: number): BracketMatchRow | undefined {
+    db.prepare(
+      `UPDATE bracket_matches SET status = 'COMPLETED', winnerPairId = ?, setsA = ?, setsB = ?, completedAt = ? WHERE id = ?`
+    ).run(winnerPairId, setsA ?? null, setsB ?? null, nowIso(), id);
+    return BracketMatches.findById(id);
   },
 };

@@ -32,6 +32,7 @@ db.exec(`
     phone TEXT,
     role TEXT NOT NULL DEFAULT 'PLAYER',
     level REAL NOT NULL DEFAULT 8.0,
+    gender TEXT,
     dominantArm TEXT,
     frequency TEXT,
     yearsPlaying REAL,
@@ -149,6 +150,80 @@ db.exec(`
     userId TEXT NOT NULL REFERENCES users(id),
     createdAt TEXT NOT NULL,
     UNIQUE(tournamentId, userId)
+  );
+
+  -- Categorías de un torneo: se juegan por género y nivel (1-8), y definen el
+  -- tamaño de la llave de eliminación directa a la que se llega tras la fase de grupos
+  -- (ej. bracketSize=16 -> 8 grupos -> "dieciseisavos").
+  CREATE TABLE IF NOT EXISTS tournament_categories (
+    id TEXT PRIMARY KEY,
+    tournamentId TEXT NOT NULL REFERENCES tournaments(id),
+    genderCategory TEXT NOT NULL,
+    level INTEGER NOT NULL,
+    bracketSize INTEGER NOT NULL DEFAULT 8,
+    status TEXT NOT NULL DEFAULT 'REGISTRATION',
+    createdAt TEXT NOT NULL
+  );
+
+  -- Inscripción individual de un jugador a una categoría. pairId se llena cuando
+  -- el club/admin arma la pareja.
+  CREATE TABLE IF NOT EXISTS tournament_category_registrations (
+    id TEXT PRIMARY KEY,
+    categoryId TEXT NOT NULL REFERENCES tournament_categories(id),
+    userId TEXT NOT NULL REFERENCES users(id),
+    pairId TEXT REFERENCES tournament_pairs(id),
+    createdAt TEXT NOT NULL,
+    UNIQUE(categoryId, userId)
+  );
+
+  CREATE TABLE IF NOT EXISTS tournament_pairs (
+    id TEXT PRIMARY KEY,
+    categoryId TEXT NOT NULL REFERENCES tournament_categories(id),
+    player1Id TEXT NOT NULL REFERENCES users(id),
+    player2Id TEXT NOT NULL REFERENCES users(id),
+    groupId TEXT REFERENCES tournament_groups(id),
+    createdAt TEXT NOT NULL
+  );
+
+  -- Grupos de fase de grupos (round-robin), normalmente de 4 parejas.
+  CREATE TABLE IF NOT EXISTS tournament_groups (
+    id TEXT PRIMARY KEY,
+    categoryId TEXT NOT NULL REFERENCES tournament_categories(id),
+    groupIndex INTEGER NOT NULL,
+    createdAt TEXT NOT NULL,
+    UNIQUE(categoryId, groupIndex)
+  );
+
+  -- Partidos de fase de grupos: todos contra todos dentro del grupo.
+  CREATE TABLE IF NOT EXISTS group_matches (
+    id TEXT PRIMARY KEY,
+    categoryId TEXT NOT NULL REFERENCES tournament_categories(id),
+    groupId TEXT NOT NULL REFERENCES tournament_groups(id),
+    pairAId TEXT NOT NULL REFERENCES tournament_pairs(id),
+    pairBId TEXT NOT NULL REFERENCES tournament_pairs(id),
+    setsA INTEGER,
+    setsB INTEGER,
+    winnerPairId TEXT,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    createdAt TEXT NOT NULL,
+    completedAt TEXT
+  );
+
+  -- Llave de eliminación directa: los 2 mejores de cada grupo avanzan aquí.
+  CREATE TABLE IF NOT EXISTS bracket_matches (
+    id TEXT PRIMARY KEY,
+    categoryId TEXT NOT NULL REFERENCES tournament_categories(id),
+    round INTEGER NOT NULL,
+    slot INTEGER NOT NULL,
+    pairAId TEXT,
+    pairBId TEXT,
+    setsA INTEGER,
+    setsB INTEGER,
+    winnerPairId TEXT,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    createdAt TEXT NOT NULL,
+    completedAt TEXT,
+    UNIQUE(categoryId, round, slot)
   );
 `);
 
