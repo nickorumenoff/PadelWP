@@ -6,10 +6,12 @@ import { useAuth } from "@/app/providers";
 export default function MatchCard({
   match,
   onJoin,
+  onSubmitResult,
   highlighted,
 }: {
   match: Match;
-  onJoin: (matchId: string, team: 1 | 2) => void;
+  onJoin?: (matchId: string, team: 1 | 2) => void;
+  onSubmitResult?: (matchId: string, winnerTeam: 1 | 2) => void;
   highlighted?: boolean;
 }) {
   const { user } = useAuth();
@@ -17,6 +19,7 @@ export default function MatchCard({
   const team1 = players.filter((p) => p.team === 1);
   const team2 = players.filter((p) => p.team === 2);
   const alreadyIn = players.some((p) => p.userId === user?.id);
+  const canReportResult = onSubmitResult && match.status === "FULL" && alreadyIn;
   const booking = match.booking as any;
   const club = booking?.court?.club;
   const courtName = booking?.court?.name;
@@ -47,7 +50,7 @@ export default function MatchCard({
                   {p.user?.name} <span className="text-xs text-muted">({p.user?.level.toFixed(2)})</span>
                 </p>
               ))}
-              {team.length < 2 && (
+              {team.length < 2 && onJoin && (
                 <button
                   disabled={alreadyIn || match.status !== "OPEN"}
                   onClick={() => onJoin(match.id, (idx + 1) as 1 | 2)}
@@ -63,8 +66,31 @@ export default function MatchCard({
 
       <div className="mt-3 flex items-center justify-between text-xs text-muted">
         <span>{match.type === "OPEN" ? "Partida abierta" : "Partida privada"}</span>
-        <span>{match.status === "FULL" ? "Completa" : "Buscando jugadores"}</span>
+        <span>
+          {match.status === "COMPLETED"
+            ? `Finalizada · Ganó equipo ${match.winnerTeam}`
+            : match.status === "FULL"
+              ? "Completa"
+              : "Buscando jugadores"}
+        </span>
       </div>
+
+      {canReportResult && (
+        <div className="mt-3 flex gap-2 border-t border-line pt-3">
+          <button
+            onClick={() => onSubmitResult!(match.id, 1)}
+            className="btn-outline flex-1 !py-1.5 text-xs"
+          >
+            Ganó equipo 1
+          </button>
+          <button
+            onClick={() => onSubmitResult!(match.id, 2)}
+            className="btn-outline flex-1 !py-1.5 text-xs"
+          >
+            Ganó equipo 2
+          </button>
+        </div>
+      )}
     </div>
   );
 }

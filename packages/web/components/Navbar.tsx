@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/providers";
 
-const links = [
+const baseLinks = [
   { href: "/", label: "Explorar" },
   { href: "/matches", label: "Partidas" },
+  { href: "/tournaments", label: "Torneos" },
   { href: "/sponsors", label: "Patrocinadores" },
   { href: "/club-admin", label: "Mi club" },
 ];
@@ -14,6 +15,9 @@ const links = [
 export default function Navbar() {
   const pathname = usePathname();
   const { user, logout, loading } = useAuth();
+
+  const links =
+    user?.role === "PLATFORM_ADMIN" ? [...baseLinks, { href: "/admin", label: "Admin" }] : baseLinks;
 
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-white/90 backdrop-blur">
