@@ -40,6 +40,10 @@ export interface Club {
   city: string;
   status: ClubStatus;
   visibilityPlan: VisibilityPlan;
+  /** Hora de apertura (0-23) usada para generar los horarios disponibles de todas sus pistas. */
+  openHour: number;
+  /** Hora de cierre (0-23). */
+  closeHour: number;
   createdAt: string;
   courts?: Court[];
 }
@@ -52,6 +56,8 @@ export interface Court {
   name: string;
   type: CourtType;
   indoor: boolean;
+  /** Si la pista tiene iluminación para jugar de noche. */
+  lighting: boolean;
   pricePerHourUsd: number;
 }
 
@@ -68,7 +74,7 @@ export interface Booking {
 }
 
 export type MatchType = "OPEN" | "PRIVATE";
-export type MatchStatus = "OPEN" | "FULL" | "PLAYED" | "CANCELLED";
+export type MatchStatus = "OPEN" | "FULL" | "COMPLETED" | "CANCELLED";
 
 export interface Match {
   id: string;
@@ -78,6 +84,9 @@ export interface Match {
   levelMin: number;
   levelMax: number;
   status: MatchStatus;
+  /** Equipo ganador (1 o 2) una vez que la partida se marca como completada. */
+  winnerTeam?: 1 | 2 | null;
+  completedAt?: string | null;
   createdAt: string;
   players?: MatchPlayer[];
   booking?: Booking;
@@ -123,4 +132,24 @@ export interface Sponsorship {
   endDate: string;
   status: SponsorshipStatus;
   amountPaidUsd: number;
+}
+
+export type TournamentStatus = "OPEN" | "CLOSED" | "CANCELLED";
+
+export interface Tournament {
+  id: string;
+  createdBy: string;
+  clubId?: string | null;
+  name: string;
+  description?: string | null;
+  city: string;
+  levelMin: number;
+  levelMax: number;
+  startDate: string;
+  endDate?: string | null;
+  maxPlayers: number;
+  status: TournamentStatus;
+  createdAt: string;
+  registeredCount?: number;
+  isRegistered?: boolean;
 }

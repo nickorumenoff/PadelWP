@@ -54,3 +54,35 @@ export function computePlayerLevel(survey: SkillSurvey): number {
   const level = 8 - normalized * 7;
   return Math.round(level * 100) / 100;
 }
+
+/**
+ * Ajusta el nivel de un jugador después de una partida, tipo Elo, teniendo en
+ * cuenta el nivel de los rivales y si ganó o perdió.
+ *
+ * El nivel usa escala invertida (1.00 = mejor, 8.00 = peor), así que aquí lo
+ * convertimos a un "rating" donde más alto es mejor para aplicar la fórmula
+ * clásica de Elo, y volvemos a convertir al final.
+ *
+ * - Ganarle a rivales de nivel similar o mejor (número más bajo) baja tu nivel
+ *   (mejora tu categoría).
+ * - Perder contra rivales de nivel similar o peor (número más alto) sube tu
+ *   nivel (empeora tu categoría).
+ * - El cambio es más grande cuanto más "sorpresivo" es el resultado.
+ */
+export function computeLevelAfterMatch(input: {
+  currentLevel: number;
+  opponentAvgLevel: number;
+  won: boolean;
+  kFactor?: number;
+}): number {
+  const K = input.kFactor ?? 0.6;
+  const ownRating = 9 - input.currentLevel;
+  const opponentRating = 9 - input.opponentAvgLevel;
+
+  const expected = 1 / (1 + Math.pow(10, (opponentRating - ownRating) / 4));
+  const actual = input.won ? 1 : 0;
+  const newRating = ownRating + K * (actual - expected);
+
+  const newLevel = Math.min(8, Math.max(1, 9 - newRating));
+  return Math.round(newLevel * 100) / 100;
+}

@@ -6,6 +6,7 @@ import type {
   Match,
   Payment,
   Sponsorship,
+  Tournament,
   User,
 } from "./types";
 
@@ -90,8 +91,26 @@ export class ApiClient {
     return this.request<Club>("/clubs", "POST", input);
   }
 
-  addCourt(clubId: string, input: { name: string; type: string; indoor: boolean; pricePerHourUsd: number }) {
+  updateClubHours(clubId: string, input: { openHour: number; closeHour: number }) {
+    return this.request<Club>(`/clubs/${clubId}/hours`, "PATCH", input);
+  }
+
+  addCourt(
+    clubId: string,
+    input: { name: string; type: string; indoor: boolean; lighting: boolean; pricePerHourUsd: number }
+  ) {
     return this.request<Court>(`/clubs/${clubId}/courts`, "POST", input);
+  }
+
+  updateCourt(
+    courtId: string,
+    input: Partial<{ name: string; type: string; indoor: boolean; lighting: boolean; pricePerHourUsd: number }>
+  ) {
+    return this.request<Court>(`/courts/${courtId}`, "PATCH", input);
+  }
+
+  listClubBookings(clubId: string) {
+    return this.request<Booking[]>(`/clubs/${clubId}/bookings`);
   }
 
   // Bookings
@@ -119,6 +138,38 @@ export class ApiClient {
 
   joinMatch(matchId: string, team: 1 | 2) {
     return this.request<Match>(`/matches/${matchId}/join`, "POST", { team });
+  }
+
+  listMyMatches() {
+    return this.request<Match[]>("/matches/mine");
+  }
+
+  submitMatchResult(matchId: string, winnerTeam: 1 | 2) {
+    return this.request<Match>(`/matches/${matchId}/result`, "POST", { winnerTeam });
+  }
+
+  // Tournaments
+  listTournaments(params?: { city?: string }) {
+    const qs = params?.city ? `?city=${encodeURIComponent(params.city)}` : "";
+    return this.request<Tournament[]>(`/tournaments${qs}`);
+  }
+
+  createTournament(input: {
+    name: string;
+    description?: string;
+    city: string;
+    clubId?: string;
+    levelMin: number;
+    levelMax: number;
+    startDate: string;
+    endDate?: string;
+    maxPlayers: number;
+  }) {
+    return this.request<Tournament>("/tournaments", "POST", input);
+  }
+
+  registerForTournament(tournamentId: string) {
+    return this.request<Tournament>(`/tournaments/${tournamentId}/register`, "POST");
   }
 
   // Payments
