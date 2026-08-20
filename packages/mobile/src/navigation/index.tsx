@@ -9,12 +9,16 @@ import { colors } from "../theme";
 import ExploreScreen from "../screens/ExploreScreen";
 import ClubDetailScreen from "../screens/ClubDetailScreen";
 import MatchesScreen from "../screens/MatchesScreen";
+import TournamentsScreen from "../screens/TournamentsScreen";
+import TournamentDetailScreen from "../screens/TournamentDetailScreen";
+import CategoryDetailScreen from "../screens/CategoryDetailScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 const ExploreStack = createNativeStackNavigator();
+const TournamentsStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 
 function ExploreStackScreen() {
@@ -23,6 +27,16 @@ function ExploreStackScreen() {
       <ExploreStack.Screen name="Explorar" component={ExploreScreen} />
       <ExploreStack.Screen name="ClubDetail" component={ClubDetailScreen} options={{ title: "Club" }} />
     </ExploreStack.Navigator>
+  );
+}
+
+function TournamentsStackScreen() {
+  return (
+    <TournamentsStack.Navigator screenOptions={{ headerTintColor: colors.blue }}>
+      <TournamentsStack.Screen name="TournamentsList" component={TournamentsScreen} options={{ title: "Torneos" }} />
+      <TournamentsStack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ title: "Torneo" }} />
+      <TournamentsStack.Screen name="CategoryDetail" component={CategoryDetailScreen} options={{ title: "Categoría" }} />
+    </TournamentsStack.Navigator>
   );
 }
 
@@ -59,6 +73,7 @@ export default function RootNavigator() {
       >
         <Tab.Screen name="Explorar" component={ExploreStackScreen} options={{ tabBarIcon: icon("🎾") }} />
         <Tab.Screen name="Partidas" component={MatchesScreen} options={{ tabBarIcon: icon("🤝") }} />
+        <Tab.Screen name="Torneos" component={TournamentsStackScreen} options={{ tabBarIcon: icon("🏆") }} />
         <Tab.Screen name="Perfil" component={ProfileStackScreen} options={{ tabBarIcon: icon("👤") }} />
       </Tab.Navigator>
     </NavigationContainer>
