@@ -15,6 +15,8 @@ import CategoryDetailScreen from "../screens/CategoryDetailScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import ClubAdminScreen from "../screens/ClubAdminScreen";
+import AdminScreen from "../screens/AdminScreen";
 
 const Tab = createBottomTabNavigator();
 const ExploreStack = createNativeStackNavigator();
@@ -45,7 +47,11 @@ function ProfileStackScreen() {
   return (
     <ProfileStack.Navigator screenOptions={{ headerTintColor: colors.blue }}>
       {user ? (
-        <ProfileStack.Screen name="Profile" component={ProfileScreen} options={{ title: "Mi perfil" }} />
+        <>
+          <ProfileStack.Screen name="Profile" component={ProfileScreen} options={{ title: "Mi perfil" }} />
+          <ProfileStack.Screen name="ClubAdmin" component={ClubAdminScreen} options={{ title: "Mi club" }} />
+          <ProfileStack.Screen name="Admin" component={AdminScreen} options={{ title: "Administración" }} />
+        </>
       ) : (
         <>
           <ProfileStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
