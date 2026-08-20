@@ -37,19 +37,22 @@ export function numGroupsForBracketSize(bracketSize: number): number {
  * (algunos grupos de 4, alguno de 3 o 5 si no es divisible exactamente), crea
  * los grupos y genera los partidos de todos-contra-todos dentro de cada uno.
  */
-export function generateGroups(categoryId: string, pairs: TournamentPairRow[], numGroups: number) {
+export async function generateGroups(categoryId: string, pairs: TournamentPairRow[], numGroups: number): Promise<void> {
   const shuffled = shuffle(pairs);
   const buckets: TournamentPairRow[][] = Array.from({ length: numGroups }, () => []);
   shuffled.forEach((pair, i) => buckets[i % numGroups].push(pair));
 
-  buckets.forEach((groupPairs, groupIndex) => {
-    const group = TournamentGroups.create({ categoryId, groupIndex });
-    groupPairs.forEach((pair) => TournamentPairs.setGroup(pair.id, group.id));
+  for (let groupIndex = 0; groupIndex < buckets.length; groupIndex++) {
+    const groupPairs = buckets[groupIndex];
+    const group = await TournamentGroups.create({ categoryId, groupIndex });
+    for (const pair of groupPairs) {
+      await TournamentPairs.setGroup(pair.id, group.id);
+    }
 
     // Todos contra todos dentro del grupo.
     for (let i = 0; i < groupPairs.length; i++) {
       for (let j = i + 1; j < groupPairs.length; j++) {
-        GroupMatches.create({
+        await GroupMatches.create({
           categoryId,
           groupId: group.id,
           pairAId: groupPairs[i].id,
@@ -57,7 +60,7 @@ export function generateGroups(categoryId: string, pairs: TournamentPairRow[], n
         });
       }
     }
-  });
+  }
 }
 
 export interface GroupStanding {
@@ -130,11 +133,11 @@ export function computeStandings(pairIds: string[], matches: GroupMatchRow[]): G
  * grupo (nunca el mismo, para no repetir cruce de fase de grupos), y crea
  * placeholders vacíos para las rondas siguientes.
  */
-export function generateKnockoutFromGroups(
+export async function generateKnockoutFromGroups(
   categoryId: string,
   groupWinners: string[],
   groupRunnersUp: string[]
-): void {
+): Promise<void> {
   const numGroups = groupWinners.length;
   const bracketSize = numGroups * 2;
   const totalRounds = Math.log2(bracketSize);
@@ -146,14 +149,15 @@ export function generateKnockoutFromGroups(
     groupRunnersUp[(i + 1) % numGroups],
   ]);
 
-  round1Pairs.forEach(([pairAId, pairBId], slot) => {
-    BracketMatches.create({ categoryId, round: 1, slot, pairAId, pairBId });
-  });
+  for (let slot = 0; slot < round1Pairs.length; slot++) {
+    const [pairAId, pairBId] = round1Pairs[slot];
+    await BracketMatches.create({ categoryId, round: 1, slot, pairAId, pairBId });
+  }
 
   for (let round = 2; round <= totalRounds; round++) {
     const matchesInRound = bracketSize / Math.pow(2, round);
     for (let slot = 0; slot < matchesInRound; slot++) {
-      BracketMatches.create({ categoryId, round, slot });
+      await BracketMatches.create({ categoryId, round, slot });
     }
   }
 }
@@ -162,13 +166,13 @@ export function generateKnockoutFromGroups(
  * Tras reportar el resultado de un partido de la llave, hace avanzar al
  * ganador a la ronda siguiente (si existe).
  */
-export function advanceBracketWinner(match: BracketMatchRow, totalRounds: number) {
+export async function advanceBracketWinner(match: BracketMatchRow, totalRounds: number): Promise<void> {
   if (match.round >= totalRounds || !match.winnerPairId) return;
   const nextRound = match.round + 1;
   const nextSlot = Math.floor(match.slot / 2);
   const position: "A" | "B" = match.slot % 2 === 0 ? "A" : "B";
-  const nextMatch = BracketMatches.findByCategoryRoundSlot(match.categoryId, nextRound, nextSlot);
-  if (nextMatch) BracketMatches.setPairSlot(nextMatch.id, position, match.winnerPairId);
+  const nextMatch = await BracketMatches.findByCategoryRoundSlot(match.categoryId, nextRound, nextSlot);
+  if (nextMatch) await BracketMatches.setPairSlot(nextMatch.id, position, match.winnerPairId);
 }
 
 export function totalRoundsForBracketSize(bracketSize: number): number {

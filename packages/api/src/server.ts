@@ -1,6 +1,7 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import { initSchema } from "./db";
 import authRoutes from "./routes/auth";
 import clubRoutes from "./routes/clubs";
 import bookingRoutes from "./routes/bookings";
@@ -10,6 +11,8 @@ import sponsorshipRoutes from "./routes/sponsorships";
 import tournamentRoutes from "./routes/tournaments";
 
 async function main() {
+  await initSchema();
+
   const app = Fastify({ logger: true });
 
   await app.register(cors, { origin: true });

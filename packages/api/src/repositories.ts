@@ -1,6 +1,6 @@
-import { db, newId, nowIso } from "./db";
+import { insertRow, newId, nowIso, pool, selectMany, selectOne, updateRow } from "./db";
 
-// ---------- Tipos de fila cruda (tal como vienen de SQLite) ----------
+// ---------- Tipos de fila cruda (tal como vienen de Postgres) ----------
 
 export interface UserRow {
   id: string;
@@ -15,7 +15,7 @@ export interface UserRow {
   frequency: string | null;
   yearsPlaying: number | null;
   selfAssessment: number | null;
-  competes: number | null;
+  competes: boolean | null;
   city: string | null;
   photoUrl: string | null;
   createdAt: string;
@@ -40,8 +40,8 @@ export interface CourtRow {
   clubId: string;
   name: string;
   type: string;
-  indoor: number;
-  lighting: number;
+  indoor: boolean;
+  lighting: boolean;
   pricePerHourUsd: number;
 }
 
@@ -74,7 +74,7 @@ export interface MatchPlayerRow {
   matchId: string;
   userId: string;
   team: number;
-  confirmed: number;
+  confirmed: boolean;
 }
 
 export interface PaymentRow {
@@ -193,7 +193,7 @@ export interface BracketMatchRow {
 // ---------- Users ----------
 
 export const Users = {
-  create(input: {
+  async create(input: {
     name: string;
     email: string;
     passwordHash: string;
@@ -206,7 +206,7 @@ export const Users = {
     yearsPlaying?: number;
     selfAssessment?: number;
     competes?: boolean;
-  }): UserRow {
+  }): Promise<UserRow> {
     const row: UserRow = {
       id: newId("user"),
       name: input.name,
@@ -220,49 +220,28 @@ export const Users = {
       frequency: input.frequency ?? null,
       yearsPlaying: input.yearsPlaying ?? null,
       selfAssessment: input.selfAssessment ?? null,
-      competes: input.competes === undefined ? null : input.competes ? 1 : 0,
+      competes: input.competes === undefined ? null : input.competes,
       city: input.city ?? null,
       photoUrl: null,
       createdAt: nowIso(),
     };
-    db.prepare(
-      `INSERT INTO users (id,name,email,passwordHash,phone,role,level,gender,dominantArm,frequency,yearsPlaying,selfAssessment,competes,city,photoUrl,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.name,
-      row.email,
-      row.passwordHash,
-      row.phone,
-      row.role,
-      row.level,
-      row.gender,
-      row.dominantArm,
-      row.frequency,
-      row.yearsPlaying,
-      row.selfAssessment,
-      row.competes,
-      row.city,
-      row.photoUrl,
-      row.createdAt
-    );
-    return row;
+    return insertRow("users", row);
   },
-  findByEmail(email: string): UserRow | undefined {
-    return db.prepare(`SELECT * FROM users WHERE email = ?`).get(email) as UserRow | undefined;
+  findByEmail(email: string): Promise<UserRow | undefined> {
+    return selectOne<UserRow>("users", { email });
   },
-  findById(id: string): UserRow | undefined {
-    return db.prepare(`SELECT * FROM users WHERE id = ?`).get(id) as UserRow | undefined;
+  findById(id: string): Promise<UserRow | undefined> {
+    return selectOne<UserRow>("users", { id });
   },
-  updateLevel(id: string, level: number) {
-    db.prepare(`UPDATE users SET level = ? WHERE id = ?`).run(level, id);
+  updateLevel(id: string, level: number): Promise<void> {
+    return updateRow("users", "id", id, { level });
   },
 };
 
 // ---------- Clubs ----------
 
 export const Clubs = {
-  create(input: { ownerId: string; name: string; description?: string; address: string; city: string }): ClubRow {
+  async create(input: { ownerId: string; name: string; description?: string; address: string; city: string }): Promise<ClubRow> {
     const row: ClubRow = {
       id: newId("club"),
       ownerId: input.ownerId,
@@ -276,38 +255,19 @@ export const Clubs = {
       closeHour: 22,
       createdAt: nowIso(),
     };
-    db.prepare(
-      `INSERT INTO clubs (id,ownerId,name,description,address,city,status,visibilityPlan,openHour,closeHour,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.ownerId,
-      row.name,
-      row.description,
-      row.address,
-      row.city,
-      row.status,
-      row.visibilityPlan,
-      row.openHour,
-      row.closeHour,
-      row.createdAt
-    );
-    return row;
+    return insertRow("clubs", row);
   },
-  findById(id: string): ClubRow | undefined {
-    return db.prepare(`SELECT * FROM clubs WHERE id = ?`).get(id) as ClubRow | undefined;
+  findById(id: string): Promise<ClubRow | undefined> {
+    return selectOne<ClubRow>("clubs", { id });
   },
-  listApproved(city?: string): ClubRow[] {
-    if (city) {
-      return db.prepare(`SELECT * FROM clubs WHERE status = 'APPROVED' AND city = ?`).all(city) as unknown as ClubRow[];
-    }
-    return db.prepare(`SELECT * FROM clubs WHERE status = 'APPROVED'`).all() as unknown as ClubRow[];
+  listApproved(city?: string): Promise<ClubRow[]> {
+    return selectMany<ClubRow>("clubs", city ? { status: "APPROVED", city } : { status: "APPROVED" });
   },
-  updateVisibilityPlan(id: string, plan: string) {
-    db.prepare(`UPDATE clubs SET visibilityPlan = ? WHERE id = ?`).run(plan, id);
+  updateVisibilityPlan(id: string, plan: string): Promise<void> {
+    return updateRow("clubs", "id", id, { visibilityPlan: plan });
   },
-  updateHours(id: string, openHour: number, closeHour: number): ClubRow | undefined {
-    db.prepare(`UPDATE clubs SET openHour = ?, closeHour = ? WHERE id = ?`).run(openHour, closeHour, id);
+  async updateHours(id: string, openHour: number, closeHour: number): Promise<ClubRow | undefined> {
+    await updateRow("clubs", "id", id, { openHour, closeHour });
     return Clubs.findById(id);
   },
 };
@@ -315,61 +275,44 @@ export const Clubs = {
 // ---------- Courts ----------
 
 export const Courts = {
-  create(input: {
+  async create(input: {
     clubId: string;
     name: string;
     type: string;
     indoor: boolean;
     lighting: boolean;
     pricePerHourUsd: number;
-  }): CourtRow {
+  }): Promise<CourtRow> {
     const row: CourtRow = {
       id: newId("court"),
       clubId: input.clubId,
       name: input.name,
       type: input.type,
-      indoor: input.indoor ? 1 : 0,
-      lighting: input.lighting ? 1 : 0,
+      indoor: !!input.indoor,
+      lighting: !!input.lighting,
       pricePerHourUsd: input.pricePerHourUsd,
     };
-    db.prepare(`INSERT INTO courts (id,clubId,name,type,indoor,lighting,pricePerHourUsd) VALUES (?,?,?,?,?,?,?)`).run(
-      row.id,
-      row.clubId,
-      row.name,
-      row.type,
-      row.indoor,
-      row.lighting,
-      row.pricePerHourUsd
-    );
-    return row;
+    return insertRow("courts", row);
   },
-  findById(id: string): CourtRow | undefined {
-    return db.prepare(`SELECT * FROM courts WHERE id = ?`).get(id) as CourtRow | undefined;
+  findById(id: string): Promise<CourtRow | undefined> {
+    return selectOne<CourtRow>("courts", { id });
   },
-  listByClub(clubId: string): CourtRow[] {
-    return db.prepare(`SELECT * FROM courts WHERE clubId = ?`).all(clubId) as unknown as CourtRow[];
+  listByClub(clubId: string): Promise<CourtRow[]> {
+    return selectMany<CourtRow>("courts", { clubId });
   },
-  update(
+  async update(
     id: string,
     input: { name?: string; type?: string; indoor?: boolean; lighting?: boolean; pricePerHourUsd?: number }
-  ): CourtRow | undefined {
-    const current = Courts.findById(id);
+  ): Promise<CourtRow | undefined> {
+    const current = await Courts.findById(id);
     if (!current) return undefined;
-    const next = {
+    await updateRow("courts", "id", id, {
       name: input.name ?? current.name,
       type: input.type ?? current.type,
-      indoor: input.indoor === undefined ? current.indoor : input.indoor ? 1 : 0,
-      lighting: input.lighting === undefined ? current.lighting : input.lighting ? 1 : 0,
+      indoor: input.indoor === undefined ? current.indoor : input.indoor,
+      lighting: input.lighting === undefined ? current.lighting : input.lighting,
       pricePerHourUsd: input.pricePerHourUsd ?? current.pricePerHourUsd,
-    };
-    db.prepare(`UPDATE courts SET name = ?, type = ?, indoor = ?, lighting = ?, pricePerHourUsd = ? WHERE id = ?`).run(
-      next.name,
-      next.type,
-      next.indoor,
-      next.lighting,
-      next.pricePerHourUsd,
-      id
-    );
+    });
     return Courts.findById(id);
   },
 };
@@ -377,7 +320,7 @@ export const Courts = {
 // ---------- Bookings ----------
 
 export const Bookings = {
-  create(input: { courtId: string; date: string; startTime: string; endTime: string; userId: string }): BookingRow {
+  async create(input: { courtId: string; date: string; startTime: string; endTime: string; userId: string }): Promise<BookingRow> {
     const row: BookingRow = {
       id: newId("booking"),
       courtId: input.courtId,
@@ -388,41 +331,36 @@ export const Bookings = {
       userId: input.userId,
       createdAt: nowIso(),
     };
-    db.prepare(
-      `INSERT INTO bookings (id,courtId,date,startTime,endTime,status,userId,createdAt) VALUES (?,?,?,?,?,?,?,?)`
-    ).run(row.id, row.courtId, row.date, row.startTime, row.endTime, row.status, row.userId, row.createdAt);
-    return row;
+    return insertRow("bookings", row);
   },
-  findById(id: string): BookingRow | undefined {
-    return db.prepare(`SELECT * FROM bookings WHERE id = ?`).get(id) as BookingRow | undefined;
+  findById(id: string): Promise<BookingRow | undefined> {
+    return selectOne<BookingRow>("bookings", { id });
   },
-  findByCourtDateStart(courtId: string, date: string, startTime: string): BookingRow | undefined {
-    return db
-      .prepare(`SELECT * FROM bookings WHERE courtId = ? AND date = ? AND startTime = ?`)
-      .get(courtId, date, startTime) as BookingRow | undefined;
+  findByCourtDateStart(courtId: string, date: string, startTime: string): Promise<BookingRow | undefined> {
+    return selectOne<BookingRow>("bookings", { courtId, date, startTime });
   },
-  listByCourtAndDate(courtId: string, date: string): BookingRow[] {
-    return db.prepare(`SELECT * FROM bookings WHERE courtId = ? AND date = ?`).all(courtId, date) as unknown as BookingRow[];
+  listByCourtAndDate(courtId: string, date: string): Promise<BookingRow[]> {
+    return selectMany<BookingRow>("bookings", { courtId, date });
   },
-  listByUser(userId: string): BookingRow[] {
-    return db.prepare(`SELECT * FROM bookings WHERE userId = ? ORDER BY date DESC`).all(userId) as unknown as BookingRow[];
+  listByUser(userId: string): Promise<BookingRow[]> {
+    return selectMany<BookingRow>("bookings", { userId }, `"date" DESC`);
   },
-  listByClub(clubId: string): BookingRow[] {
-    return db
-      .prepare(
-        `SELECT b.* FROM bookings b
-         JOIN courts c ON c.id = b.courtId
-         WHERE c.clubId = ?
-         ORDER BY b.date DESC, b.startTime ASC`
-      )
-      .all(clubId) as unknown as BookingRow[];
+  async listByClub(clubId: string): Promise<BookingRow[]> {
+    const res = await pool.query(
+      `SELECT b.* FROM bookings b
+       JOIN courts c ON c."id" = b."courtId"
+       WHERE c."clubId" = $1
+       ORDER BY b."date" DESC, b."startTime" ASC`,
+      [clubId]
+    );
+    return res.rows as BookingRow[];
   },
 };
 
 // ---------- Matches ----------
 
 export const Matches = {
-  create(input: { bookingId: string; creatorId: string; type: string; levelMin: number; levelMax: number }): MatchRow {
+  async create(input: { bookingId: string; creatorId: string; type: string; levelMin: number; levelMax: number }): Promise<MatchRow> {
     const row: MatchRow = {
       id: newId("match"),
       bookingId: input.bookingId,
@@ -435,101 +373,75 @@ export const Matches = {
       completedAt: null,
       createdAt: nowIso(),
     };
-    db.prepare(
-      `INSERT INTO matches (id,bookingId,creatorId,type,levelMin,levelMax,status,winnerTeam,completedAt,createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.bookingId,
-      row.creatorId,
-      row.type,
-      row.levelMin,
-      row.levelMax,
-      row.status,
-      row.winnerTeam,
-      row.completedAt,
-      row.createdAt
-    );
-    return row;
+    return insertRow("matches", row);
   },
-  findById(id: string): MatchRow | undefined {
-    return db.prepare(`SELECT * FROM matches WHERE id = ?`).get(id) as MatchRow | undefined;
+  findById(id: string): Promise<MatchRow | undefined> {
+    return selectOne<MatchRow>("matches", { id });
   },
-  findByBookingId(bookingId: string): MatchRow | undefined {
-    return db.prepare(`SELECT * FROM matches WHERE bookingId = ?`).get(bookingId) as MatchRow | undefined;
+  findByBookingId(bookingId: string): Promise<MatchRow | undefined> {
+    return selectOne<MatchRow>("matches", { bookingId });
   },
-  updateStatus(id: string, status: string) {
-    db.prepare(`UPDATE matches SET status = ? WHERE id = ?`).run(status, id);
+  updateStatus(id: string, status: string): Promise<void> {
+    return updateRow("matches", "id", id, { status });
   },
-  setResult(id: string, winnerTeam: 1 | 2): MatchRow | undefined {
-    db.prepare(`UPDATE matches SET status = 'COMPLETED', winnerTeam = ?, completedAt = ? WHERE id = ?`).run(
-      winnerTeam,
-      nowIso(),
-      id
-    );
+  async setResult(id: string, winnerTeam: 1 | 2): Promise<MatchRow | undefined> {
+    await updateRow("matches", "id", id, { status: "COMPLETED", winnerTeam, completedAt: nowIso() });
     return Matches.findById(id);
   },
-  list(filters: { city?: string; levelMin?: number; levelMax?: number }): MatchRow[] {
+  async list(filters: { city?: string; levelMin?: number; levelMax?: number }): Promise<MatchRow[]> {
     // Join manual con bookings/courts/clubs para filtrar por ciudad.
     let sql = `
       SELECT m.* FROM matches m
-      JOIN bookings b ON b.id = m.bookingId
-      JOIN courts c ON c.id = b.courtId
-      JOIN clubs cl ON cl.id = c.clubId
-      WHERE m.status IN ('OPEN','FULL')
+      JOIN bookings b ON b."id" = m."bookingId"
+      JOIN courts c ON c."id" = b."courtId"
+      JOIN clubs cl ON cl."id" = c."clubId"
+      WHERE m."status" IN ('OPEN','FULL')
     `;
     const params: (string | number)[] = [];
     if (filters.city) {
-      sql += ` AND cl.city = ?`;
       params.push(filters.city);
+      sql += ` AND cl."city" = $${params.length}`;
     }
     if (filters.levelMin !== undefined) {
-      sql += ` AND m.levelMax >= ?`;
       params.push(filters.levelMin);
+      sql += ` AND m."levelMax" >= $${params.length}`;
     }
     if (filters.levelMax !== undefined) {
-      sql += ` AND m.levelMin <= ?`;
       params.push(filters.levelMax);
+      sql += ` AND m."levelMin" <= $${params.length}`;
     }
-    sql += ` ORDER BY m.createdAt DESC`;
-    return db.prepare(sql).all(...params) as unknown as MatchRow[];
+    sql += ` ORDER BY m."createdAt" DESC`;
+    const res = await pool.query(sql, params);
+    return res.rows as MatchRow[];
   },
-  listForUser(userId: string): MatchRow[] {
-    return db
-      .prepare(
-        `SELECT m.* FROM matches m
-         JOIN match_players mp ON mp.matchId = m.id
-         WHERE mp.userId = ?
-         ORDER BY m.createdAt DESC`
-      )
-      .all(userId) as unknown as MatchRow[];
+  async listForUser(userId: string): Promise<MatchRow[]> {
+    const res = await pool.query(
+      `SELECT m.* FROM matches m
+       JOIN match_players mp ON mp."matchId" = m."id"
+       WHERE mp."userId" = $1
+       ORDER BY m."createdAt" DESC`,
+      [userId]
+    );
+    return res.rows as MatchRow[];
   },
 };
 
 export const MatchPlayers = {
-  create(input: { matchId: string; userId: string; team: number }): MatchPlayerRow {
+  create(input: { matchId: string; userId: string; team: number }): Promise<MatchPlayerRow> {
     const row: MatchPlayerRow = {
       id: newId("mp"),
       matchId: input.matchId,
       userId: input.userId,
       team: input.team,
-      confirmed: 1,
+      confirmed: true,
     };
-    db.prepare(`INSERT INTO match_players (id,matchId,userId,team,confirmed) VALUES (?,?,?,?,?)`).run(
-      row.id,
-      row.matchId,
-      row.userId,
-      row.team,
-      row.confirmed
-    );
-    return row;
+    return insertRow("match_players", row);
   },
-  listByMatch(matchId: string): MatchPlayerRow[] {
-    return db.prepare(`SELECT * FROM match_players WHERE matchId = ?`).all(matchId) as unknown as MatchPlayerRow[];
+  listByMatch(matchId: string): Promise<MatchPlayerRow[]> {
+    return selectMany<MatchPlayerRow>("match_players", { matchId });
   },
-  isPlayerInMatch(matchId: string, userId: string): boolean {
-    const row = db
-      .prepare(`SELECT id FROM match_players WHERE matchId = ? AND userId = ?`)
-      .get(matchId, userId);
+  async isPlayerInMatch(matchId: string, userId: string): Promise<boolean> {
+    const row = await selectOne<{ id: string }>("match_players", { matchId, userId });
     return !!row;
   },
 };
@@ -546,7 +458,7 @@ export const Payments = {
     proofUrl?: string;
     purpose: string;
     relatedId?: string;
-  }): PaymentRow {
+  }): Promise<PaymentRow> {
     const row: PaymentRow = {
       id: newId("pay"),
       userId: input.userId,
@@ -560,32 +472,16 @@ export const Payments = {
       relatedId: input.relatedId ?? null,
       createdAt: nowIso(),
     };
-    db.prepare(
-      `INSERT INTO payments (id,userId,amount,currency,method,reference,proofUrl,status,purpose,relatedId,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.userId,
-      row.amount,
-      row.currency,
-      row.method,
-      row.reference,
-      row.proofUrl,
-      row.status,
-      row.purpose,
-      row.relatedId,
-      row.createdAt
-    );
-    return row;
+    return insertRow("payments", row);
   },
-  listByUser(userId: string): PaymentRow[] {
-    return db.prepare(`SELECT * FROM payments WHERE userId = ? ORDER BY createdAt DESC`).all(userId) as unknown as PaymentRow[];
+  listByUser(userId: string): Promise<PaymentRow[]> {
+    return selectMany<PaymentRow>("payments", { userId }, `"createdAt" DESC`);
   },
-  findById(id: string): PaymentRow | undefined {
-    return db.prepare(`SELECT * FROM payments WHERE id = ?`).get(id) as PaymentRow | undefined;
+  findById(id: string): Promise<PaymentRow | undefined> {
+    return selectOne<PaymentRow>("payments", { id });
   },
-  updateStatus(id: string, status: string): PaymentRow | undefined {
-    db.prepare(`UPDATE payments SET status = ? WHERE id = ?`).run(status, id);
+  async updateStatus(id: string, status: string): Promise<PaymentRow | undefined> {
+    await updateRow("payments", "id", id, { status });
     return Payments.findById(id);
   },
 };
@@ -599,7 +495,7 @@ export const Sponsorships = {
     clubId?: string;
     bannerUrl?: string;
     linkUrl?: string;
-  }): SponsorshipRow {
+  }): Promise<SponsorshipRow> {
     const row: SponsorshipRow = {
       id: newId("sponsor"),
       sponsorName: input.sponsorName,
@@ -612,31 +508,16 @@ export const Sponsorships = {
       status: "PENDING",
       amountPaidUsd: 0,
     };
-    db.prepare(
-      `INSERT INTO sponsorships (id,sponsorName,planName,clubId,bannerUrl,linkUrl,startDate,endDate,status,amountPaidUsd)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.sponsorName,
-      row.planName,
-      row.clubId,
-      row.bannerUrl,
-      row.linkUrl,
-      row.startDate,
-      row.endDate,
-      row.status,
-      row.amountPaidUsd
-    );
-    return row;
+    return insertRow("sponsorships", row);
   },
-  listActive(): SponsorshipRow[] {
-    return db.prepare(`SELECT * FROM sponsorships WHERE status = 'ACTIVE' ORDER BY startDate DESC`).all() as unknown as SponsorshipRow[];
+  listActive(): Promise<SponsorshipRow[]> {
+    return selectMany<SponsorshipRow>("sponsorships", { status: "ACTIVE" }, `"startDate" DESC`);
   },
-  findById(id: string): SponsorshipRow | undefined {
-    return db.prepare(`SELECT * FROM sponsorships WHERE id = ?`).get(id) as SponsorshipRow | undefined;
+  findById(id: string): Promise<SponsorshipRow | undefined> {
+    return selectOne<SponsorshipRow>("sponsorships", { id });
   },
-  activate(id: string, endDate: string): SponsorshipRow | undefined {
-    db.prepare(`UPDATE sponsorships SET status = 'ACTIVE', endDate = ? WHERE id = ?`).run(endDate, id);
+  async activate(id: string, endDate: string): Promise<SponsorshipRow | undefined> {
+    await updateRow("sponsorships", "id", id, { status: "ACTIVE", endDate });
     return Sponsorships.findById(id);
   },
 };
@@ -644,7 +525,7 @@ export const Sponsorships = {
 // ---------- Tournaments ----------
 
 export const Tournaments = {
-  create(input: {
+  async create(input: {
     createdBy: string;
     clubId?: string;
     name: string;
@@ -655,7 +536,7 @@ export const Tournaments = {
     startDate: string;
     endDate?: string;
     maxPlayers: number;
-  }): TournamentRow {
+  }): Promise<TournamentRow> {
     const row: TournamentRow = {
       id: newId("tourney"),
       createdBy: input.createdBy,
@@ -671,67 +552,34 @@ export const Tournaments = {
       status: "OPEN",
       createdAt: nowIso(),
     };
-    db.prepare(
-      `INSERT INTO tournaments (id,createdBy,clubId,name,description,city,levelMin,levelMax,startDate,endDate,maxPlayers,status,createdAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.createdBy,
-      row.clubId,
-      row.name,
-      row.description,
-      row.city,
-      row.levelMin,
-      row.levelMax,
-      row.startDate,
-      row.endDate,
-      row.maxPlayers,
-      row.status,
-      row.createdAt
-    );
-    return row;
+    return insertRow("tournaments", row);
   },
-  findById(id: string): TournamentRow | undefined {
-    return db.prepare(`SELECT * FROM tournaments WHERE id = ?`).get(id) as TournamentRow | undefined;
+  findById(id: string): Promise<TournamentRow | undefined> {
+    return selectOne<TournamentRow>("tournaments", { id });
   },
-  list(city?: string): TournamentRow[] {
-    if (city) {
-      return db
-        .prepare(`SELECT * FROM tournaments WHERE city = ? ORDER BY startDate ASC`)
-        .all(city) as unknown as TournamentRow[];
-    }
-    return db.prepare(`SELECT * FROM tournaments ORDER BY startDate ASC`).all() as unknown as TournamentRow[];
+  list(city?: string): Promise<TournamentRow[]> {
+    return selectMany<TournamentRow>("tournaments", city ? { city } : {}, `"startDate" ASC`);
   },
-  updateStatus(id: string, status: string) {
-    db.prepare(`UPDATE tournaments SET status = ? WHERE id = ?`).run(status, id);
+  updateStatus(id: string, status: string): Promise<void> {
+    return updateRow("tournaments", "id", id, { status });
   },
 };
 
 export const TournamentRegistrations = {
-  create(input: { tournamentId: string; userId: string }): TournamentRegistrationRow {
+  create(input: { tournamentId: string; userId: string }): Promise<TournamentRegistrationRow> {
     const row: TournamentRegistrationRow = {
       id: newId("treg"),
       tournamentId: input.tournamentId,
       userId: input.userId,
       createdAt: nowIso(),
     };
-    db.prepare(`INSERT INTO tournament_registrations (id,tournamentId,userId,createdAt) VALUES (?,?,?,?)`).run(
-      row.id,
-      row.tournamentId,
-      row.userId,
-      row.createdAt
-    );
-    return row;
+    return insertRow("tournament_registrations", row);
   },
-  listByTournament(tournamentId: string): TournamentRegistrationRow[] {
-    return db
-      .prepare(`SELECT * FROM tournament_registrations WHERE tournamentId = ?`)
-      .all(tournamentId) as unknown as TournamentRegistrationRow[];
+  listByTournament(tournamentId: string): Promise<TournamentRegistrationRow[]> {
+    return selectMany<TournamentRegistrationRow>("tournament_registrations", { tournamentId });
   },
-  isRegistered(tournamentId: string, userId: string): boolean {
-    const row = db
-      .prepare(`SELECT id FROM tournament_registrations WHERE tournamentId = ? AND userId = ?`)
-      .get(tournamentId, userId);
+  async isRegistered(tournamentId: string, userId: string): Promise<boolean> {
+    const row = await selectOne<{ id: string }>("tournament_registrations", { tournamentId, userId });
     return !!row;
   },
 };
@@ -739,7 +587,7 @@ export const TournamentRegistrations = {
 // ---------- Categorías de torneo (género + nivel + tamaño de llave) ----------
 
 export const TournamentCategories = {
-  create(input: { tournamentId: string; genderCategory: string; level: number; bracketSize: number }): TournamentCategoryRow {
+  create(input: { tournamentId: string; genderCategory: string; level: number; bracketSize: number }): Promise<TournamentCategoryRow> {
     const row: TournamentCategoryRow = {
       id: newId("tcat"),
       tournamentId: input.tournamentId,
@@ -749,26 +597,21 @@ export const TournamentCategories = {
       status: "REGISTRATION",
       createdAt: nowIso(),
     };
-    db.prepare(
-      `INSERT INTO tournament_categories (id,tournamentId,genderCategory,level,bracketSize,status,createdAt) VALUES (?,?,?,?,?,?,?)`
-    ).run(row.id, row.tournamentId, row.genderCategory, row.level, row.bracketSize, row.status, row.createdAt);
-    return row;
+    return insertRow("tournament_categories", row);
   },
-  findById(id: string): TournamentCategoryRow | undefined {
-    return db.prepare(`SELECT * FROM tournament_categories WHERE id = ?`).get(id) as TournamentCategoryRow | undefined;
+  findById(id: string): Promise<TournamentCategoryRow | undefined> {
+    return selectOne<TournamentCategoryRow>("tournament_categories", { id });
   },
-  listByTournament(tournamentId: string): TournamentCategoryRow[] {
-    return db
-      .prepare(`SELECT * FROM tournament_categories WHERE tournamentId = ? ORDER BY level ASC`)
-      .all(tournamentId) as unknown as TournamentCategoryRow[];
+  listByTournament(tournamentId: string): Promise<TournamentCategoryRow[]> {
+    return selectMany<TournamentCategoryRow>("tournament_categories", { tournamentId }, `"level" ASC`);
   },
-  updateStatus(id: string, status: string) {
-    db.prepare(`UPDATE tournament_categories SET status = ? WHERE id = ?`).run(status, id);
+  updateStatus(id: string, status: string): Promise<void> {
+    return updateRow("tournament_categories", "id", id, { status });
   },
 };
 
 export const CategoryRegistrations = {
-  create(input: { categoryId: string; userId: string }): CategoryRegistrationRow {
+  create(input: { categoryId: string; userId: string }): Promise<CategoryRegistrationRow> {
     const row: CategoryRegistrationRow = {
       id: newId("creg"),
       categoryId: input.categoryId,
@@ -776,37 +619,22 @@ export const CategoryRegistrations = {
       pairId: null,
       createdAt: nowIso(),
     };
-    db.prepare(`INSERT INTO tournament_category_registrations (id,categoryId,userId,pairId,createdAt) VALUES (?,?,?,?,?)`).run(
-      row.id,
-      row.categoryId,
-      row.userId,
-      row.pairId,
-      row.createdAt
-    );
-    return row;
+    return insertRow("tournament_category_registrations", row);
   },
-  listByCategory(categoryId: string): CategoryRegistrationRow[] {
-    return db
-      .prepare(`SELECT * FROM tournament_category_registrations WHERE categoryId = ? ORDER BY createdAt ASC`)
-      .all(categoryId) as unknown as CategoryRegistrationRow[];
+  listByCategory(categoryId: string): Promise<CategoryRegistrationRow[]> {
+    return selectMany<CategoryRegistrationRow>("tournament_category_registrations", { categoryId }, `"createdAt" ASC`);
   },
-  isRegistered(categoryId: string, userId: string): boolean {
-    const row = db
-      .prepare(`SELECT id FROM tournament_category_registrations WHERE categoryId = ? AND userId = ?`)
-      .get(categoryId, userId);
+  async isRegistered(categoryId: string, userId: string): Promise<boolean> {
+    const row = await selectOne<{ id: string }>("tournament_category_registrations", { categoryId, userId });
     return !!row;
   },
-  setPair(categoryId: string, userId: string, pairId: string) {
-    db.prepare(`UPDATE tournament_category_registrations SET pairId = ? WHERE categoryId = ? AND userId = ?`).run(
-      pairId,
-      categoryId,
-      userId
-    );
+  setPair(categoryId: string, userId: string, pairId: string): Promise<void> {
+    return updateRow2("tournament_category_registrations", { categoryId, userId }, { pairId });
   },
 };
 
 export const TournamentPairs = {
-  create(input: { categoryId: string; player1Id: string; player2Id: string }): TournamentPairRow {
+  create(input: { categoryId: string; player1Id: string; player2Id: string }): Promise<TournamentPairRow> {
     const row: TournamentPairRow = {
       id: newId("pair"),
       categoryId: input.categoryId,
@@ -815,52 +643,36 @@ export const TournamentPairs = {
       groupId: null,
       createdAt: nowIso(),
     };
-    db.prepare(`INSERT INTO tournament_pairs (id,categoryId,player1Id,player2Id,groupId,createdAt) VALUES (?,?,?,?,?,?)`).run(
-      row.id,
-      row.categoryId,
-      row.player1Id,
-      row.player2Id,
-      row.groupId,
-      row.createdAt
-    );
-    return row;
+    return insertRow("tournament_pairs", row);
   },
-  findById(id: string): TournamentPairRow | undefined {
-    return db.prepare(`SELECT * FROM tournament_pairs WHERE id = ?`).get(id) as TournamentPairRow | undefined;
+  findById(id: string): Promise<TournamentPairRow | undefined> {
+    return selectOne<TournamentPairRow>("tournament_pairs", { id });
   },
-  listByCategory(categoryId: string): TournamentPairRow[] {
-    return db.prepare(`SELECT * FROM tournament_pairs WHERE categoryId = ?`).all(categoryId) as unknown as TournamentPairRow[];
+  listByCategory(categoryId: string): Promise<TournamentPairRow[]> {
+    return selectMany<TournamentPairRow>("tournament_pairs", { categoryId });
   },
-  setGroup(id: string, groupId: string) {
-    db.prepare(`UPDATE tournament_pairs SET groupId = ? WHERE id = ?`).run(groupId, id);
+  setGroup(id: string, groupId: string): Promise<void> {
+    return updateRow("tournament_pairs", "id", id, { groupId });
   },
 };
 
 export const TournamentGroups = {
-  create(input: { categoryId: string; groupIndex: number }): TournamentGroupRow {
+  create(input: { categoryId: string; groupIndex: number }): Promise<TournamentGroupRow> {
     const row: TournamentGroupRow = {
       id: newId("grp"),
       categoryId: input.categoryId,
       groupIndex: input.groupIndex,
       createdAt: nowIso(),
     };
-    db.prepare(`INSERT INTO tournament_groups (id,categoryId,groupIndex,createdAt) VALUES (?,?,?,?)`).run(
-      row.id,
-      row.categoryId,
-      row.groupIndex,
-      row.createdAt
-    );
-    return row;
+    return insertRow("tournament_groups", row);
   },
-  listByCategory(categoryId: string): TournamentGroupRow[] {
-    return db
-      .prepare(`SELECT * FROM tournament_groups WHERE categoryId = ? ORDER BY groupIndex ASC`)
-      .all(categoryId) as unknown as TournamentGroupRow[];
+  listByCategory(categoryId: string): Promise<TournamentGroupRow[]> {
+    return selectMany<TournamentGroupRow>("tournament_groups", { categoryId }, `"groupIndex" ASC`);
   },
 };
 
 export const GroupMatches = {
-  create(input: { categoryId: string; groupId: string; pairAId: string; pairBId: string }): GroupMatchRow {
+  create(input: { categoryId: string; groupId: string; pairAId: string; pairBId: string }): Promise<GroupMatchRow> {
     const row: GroupMatchRow = {
       id: newId("gmatch"),
       categoryId: input.categoryId,
@@ -874,37 +686,25 @@ export const GroupMatches = {
       createdAt: nowIso(),
       completedAt: null,
     };
-    db.prepare(
-      `INSERT INTO group_matches (id,categoryId,groupId,pairAId,pairBId,setsA,setsB,winnerPairId,status,createdAt,completedAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.categoryId,
-      row.groupId,
-      row.pairAId,
-      row.pairBId,
-      row.setsA,
-      row.setsB,
-      row.winnerPairId,
-      row.status,
-      row.createdAt,
-      row.completedAt
-    );
-    return row;
+    return insertRow("group_matches", row);
   },
-  findById(id: string): GroupMatchRow | undefined {
-    return db.prepare(`SELECT * FROM group_matches WHERE id = ?`).get(id) as GroupMatchRow | undefined;
+  findById(id: string): Promise<GroupMatchRow | undefined> {
+    return selectOne<GroupMatchRow>("group_matches", { id });
   },
-  listByGroup(groupId: string): GroupMatchRow[] {
-    return db.prepare(`SELECT * FROM group_matches WHERE groupId = ?`).all(groupId) as unknown as GroupMatchRow[];
+  listByGroup(groupId: string): Promise<GroupMatchRow[]> {
+    return selectMany<GroupMatchRow>("group_matches", { groupId });
   },
-  listByCategory(categoryId: string): GroupMatchRow[] {
-    return db.prepare(`SELECT * FROM group_matches WHERE categoryId = ?`).all(categoryId) as unknown as GroupMatchRow[];
+  listByCategory(categoryId: string): Promise<GroupMatchRow[]> {
+    return selectMany<GroupMatchRow>("group_matches", { categoryId });
   },
-  setResult(id: string, winnerPairId: string, setsA?: number, setsB?: number): GroupMatchRow | undefined {
-    db.prepare(
-      `UPDATE group_matches SET status = 'COMPLETED', winnerPairId = ?, setsA = ?, setsB = ?, completedAt = ? WHERE id = ?`
-    ).run(winnerPairId, setsA ?? null, setsB ?? null, nowIso(), id);
+  async setResult(id: string, winnerPairId: string, setsA?: number, setsB?: number): Promise<GroupMatchRow | undefined> {
+    await updateRow("group_matches", "id", id, {
+      status: "COMPLETED",
+      winnerPairId,
+      setsA: setsA ?? null,
+      setsB: setsB ?? null,
+      completedAt: nowIso(),
+    });
     return GroupMatches.findById(id);
   },
 };
@@ -916,7 +716,7 @@ export const BracketMatches = {
     slot: number;
     pairAId?: string | null;
     pairBId?: string | null;
-  }): BracketMatchRow {
+  }): Promise<BracketMatchRow> {
     const row: BracketMatchRow = {
       id: newId("bmatch"),
       categoryId: input.categoryId,
@@ -931,46 +731,39 @@ export const BracketMatches = {
       createdAt: nowIso(),
       completedAt: null,
     };
-    db.prepare(
-      `INSERT INTO bracket_matches (id,categoryId,round,slot,pairAId,pairBId,setsA,setsB,winnerPairId,status,createdAt,completedAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      row.id,
-      row.categoryId,
-      row.round,
-      row.slot,
-      row.pairAId,
-      row.pairBId,
-      row.setsA,
-      row.setsB,
-      row.winnerPairId,
-      row.status,
-      row.createdAt,
-      row.completedAt
-    );
-    return row;
+    return insertRow("bracket_matches", row);
   },
-  findById(id: string): BracketMatchRow | undefined {
-    return db.prepare(`SELECT * FROM bracket_matches WHERE id = ?`).get(id) as BracketMatchRow | undefined;
+  findById(id: string): Promise<BracketMatchRow | undefined> {
+    return selectOne<BracketMatchRow>("bracket_matches", { id });
   },
-  findByCategoryRoundSlot(categoryId: string, round: number, slot: number): BracketMatchRow | undefined {
-    return db
-      .prepare(`SELECT * FROM bracket_matches WHERE categoryId = ? AND round = ? AND slot = ?`)
-      .get(categoryId, round, slot) as BracketMatchRow | undefined;
+  findByCategoryRoundSlot(categoryId: string, round: number, slot: number): Promise<BracketMatchRow | undefined> {
+    return selectOne<BracketMatchRow>("bracket_matches", { categoryId, round, slot });
   },
-  listByCategory(categoryId: string): BracketMatchRow[] {
-    return db
-      .prepare(`SELECT * FROM bracket_matches WHERE categoryId = ? ORDER BY round ASC, slot ASC`)
-      .all(categoryId) as unknown as BracketMatchRow[];
+  listByCategory(categoryId: string): Promise<BracketMatchRow[]> {
+    return selectMany<BracketMatchRow>("bracket_matches", { categoryId }, `"round" ASC, "slot" ASC`);
   },
-  setPairSlot(id: string, position: "A" | "B", pairId: string) {
-    if (position === "A") db.prepare(`UPDATE bracket_matches SET pairAId = ? WHERE id = ?`).run(pairId, id);
-    else db.prepare(`UPDATE bracket_matches SET pairBId = ? WHERE id = ?`).run(pairId, id);
+  setPairSlot(id: string, position: "A" | "B", pairId: string): Promise<void> {
+    return updateRow("bracket_matches", "id", id, position === "A" ? { pairAId: pairId } : { pairBId: pairId });
   },
-  setResult(id: string, winnerPairId: string, setsA?: number, setsB?: number): BracketMatchRow | undefined {
-    db.prepare(
-      `UPDATE bracket_matches SET status = 'COMPLETED', winnerPairId = ?, setsA = ?, setsB = ?, completedAt = ? WHERE id = ?`
-    ).run(winnerPairId, setsA ?? null, setsB ?? null, nowIso(), id);
+  async setResult(id: string, winnerPairId: string, setsA?: number, setsB?: number): Promise<BracketMatchRow | undefined> {
+    await updateRow("bracket_matches", "id", id, {
+      status: "COMPLETED",
+      winnerPairId,
+      setsA: setsA ?? null,
+      setsB: setsB ?? null,
+      completedAt: nowIso(),
+    });
     return BracketMatches.findById(id);
   },
 };
+
+// Variante de updateRow con múltiples columnas en el WHERE (usada por
+// CategoryRegistrations.setPair, cuya clave lógica es categoryId+userId).
+async function updateRow2(table: string, where: Record<string, unknown>, sets: Record<string, unknown>): Promise<void> {
+  const setKeys = Object.keys(sets);
+  const whereKeys = Object.keys(where);
+  const setClause = setKeys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+  const whereClause = whereKeys.map((k, i) => `"${k}" = $${setKeys.length + i + 1}`).join(" AND ");
+  const values = [...setKeys.map((k) => sets[k]), ...whereKeys.map((k) => where[k])];
+  await pool.query(`UPDATE ${table} SET ${setClause} WHERE ${whereClause}`, values);
+}
