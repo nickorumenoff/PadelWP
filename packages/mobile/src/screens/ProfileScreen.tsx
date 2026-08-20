@@ -12,7 +12,7 @@ const frequencyLabel: Record<string, string> = {
   OCASIONAL: "Ocasional",
 };
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();
 
   if (!user) return null;
@@ -44,6 +44,18 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      <Pressable style={styles.menuRow} onPress={() => navigation.navigate("ClubAdmin")}>
+        <Text style={styles.menuRowText}>Mi club</Text>
+        <Text style={styles.menuRowChevron}>›</Text>
+      </Pressable>
+
+      {user.role === "PLATFORM_ADMIN" && (
+        <Pressable style={styles.menuRow} onPress={() => navigation.navigate("Admin")}>
+          <Text style={styles.menuRowText}>Panel de administración</Text>
+          <Text style={styles.menuRowChevron}>›</Text>
+        </Pressable>
+      )}
+
       <Pressable style={styles.logoutBtn} onPress={logout}>
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </Pressable>
@@ -62,6 +74,19 @@ const styles = StyleSheet.create({
   statBox: { flex: 1, backgroundColor: colors.mist, borderRadius: 12, padding: 10, alignItems: "center" },
   statLabel: { fontSize: 11, color: colors.muted, marginBottom: 4 },
   statValue: { fontSize: 15, fontWeight: "700", color: colors.ink },
+  menuRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  menuRowText: { fontSize: 14, fontWeight: "600", color: colors.ink },
+  menuRowChevron: { fontSize: 16, color: colors.muted },
   logoutBtn: { marginTop: 28, borderWidth: 1, borderColor: colors.line, borderRadius: 999, paddingVertical: 12, alignItems: "center" },
   logoutText: { fontSize: 13, fontWeight: "600", color: colors.ink },
 });
