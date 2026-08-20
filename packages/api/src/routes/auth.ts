@@ -43,7 +43,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const { name, email, password, role, city, gender, dominantArm, frequency, yearsPlaying, selfAssessment, competes } =
       parsed.data;
 
-    const existing = Users.findByEmail(email);
+    const existing = await Users.findByEmail(email);
     if (existing) {
       return reply.status(409).send({ error: "Ya existe una cuenta con ese email" });
     }
@@ -51,7 +51,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const level = computePlayerLevel({ dominantArm, frequency, yearsPlaying, selfAssessment, competes });
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = Users.create({
+    const user = await Users.create({
       name,
       email,
       passwordHash,
@@ -77,7 +77,7 @@ export default async function authRoutes(app: FastifyInstance) {
     }
     const { email, password } = parsed.data;
 
-    const user = Users.findByEmail(email);
+    const user = await Users.findByEmail(email);
     if (!user) {
       return reply.status(401).send({ error: "Credenciales inválidas" });
     }
@@ -92,7 +92,7 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.get("/auth/me", { preHandler: requireAuth }, async (req, reply) => {
     const userId = (req as any).userId as string;
-    const user = Users.findById(userId);
+    const user = await Users.findById(userId);
     if (!user) return reply.status(404).send({ error: "Usuario no encontrado" });
     return reply.send(publicUser(user));
   });

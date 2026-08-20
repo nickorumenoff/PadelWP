@@ -18,21 +18,21 @@ export default async function bookingRoutes(app: FastifyInstance) {
     const userId = (req as any).userId as string;
     const { courtId, date, startTime, endTime } = parsed.data;
 
-    const court = Courts.findById(courtId);
+    const court = await Courts.findById(courtId);
     if (!court) return reply.status(404).send({ error: "Pista no encontrada" });
 
-    const conflict = Bookings.findByCourtDateStart(courtId, date, startTime);
+    const conflict = await Bookings.findByCourtDateStart(courtId, date, startTime);
     if (conflict) {
       return reply.status(409).send({ error: "Ese horario ya está reservado" });
     }
 
-    const booking = Bookings.create({ courtId, date, startTime, endTime, userId });
+    const booking = await Bookings.create({ courtId, date, startTime, endTime, userId });
     return reply.send(publicBooking(booking));
   });
 
   app.get("/bookings/me", { preHandler: requireAuth }, async (req, reply) => {
     const userId = (req as any).userId as string;
-    const bookings = Bookings.listByUser(userId);
+    const bookings = await Bookings.listByUser(userId);
     return reply.send(bookings.map(publicBooking));
   });
 }

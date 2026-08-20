@@ -39,16 +39,17 @@ export default async function clubRoutes(app: FastifyInstance) {
   // Este es el mecanismo por el cual un club paga por "presencia destacada" en la app.
   app.get("/clubs", async (req, reply) => {
     const { city } = req.query as { city?: string };
-    const clubs = Clubs.listApproved(city);
+    const clubs = await Clubs.listApproved(city);
     clubs.sort((a, b) => planOrder[a.visibilityPlan] - planOrder[b.visibilityPlan]);
-    return reply.send(clubs.map((c) => publicClub(c, Courts.listByClub(c.id))));
+    const withCourts = await Promise.all(clubs.map(async (c) => publicClub(c, await Courts.listByClub(c.id))));
+    return reply.send(withCourts);
   });
 
   app.get("/clubs/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const club = Clubs.findById(id);
+    const club = await Clubs.findById(id);
     if (!club) return reply.status(404).send({ error: "Club no encontrado" });
-    return reply.send(publicClub(club, Courts.listByClub(club.id)));
+    return reply.send(publicClub(club, await Courts.listByClub(club.id)));
   });
 
   app.post("/clubs", { preHandler: requireAuth }, async (req, reply) => {
@@ -56,7 +57,7 @@ export default async function clubRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const userId = (req as any).userId as string;
 
-    const club = Clubs.create({ ...parsed.data, ownerId: userId }); // auto-aprobado en el MVP
+    const club = await Clubs.create({ ...parsed.data, ownerId: userId }); // auto-aprobado en el MVP
     return reply.send(publicClub(club, []));
   });
 
@@ -65,7 +66,7 @@ export default async function clubRoutes(app: FastifyInstance) {
     const parsed = createCourtSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
-    const club = Clubs.findById(id);
+    const club = await Clubs.findById(id);
     if (!club) return reply.status(404).send({ error: "Club no encontrado" });
 
     const userId = (req as any).userId as string;
@@ -73,7 +74,7 @@ export default async function clubRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "Solo el dueño del club puede añadir pistas" });
     }
 
-    const court = Courts.create({ ...parsed.data, clubId: id });
+    const court = await Courts.create({ ...parsed.data, clubId: id });
     return reply.send(publicCourt(court));
   });
 
@@ -83,16 +84,16 @@ export default async function clubRoutes(app: FastifyInstance) {
     const parsed = updateCourtSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
-    const court = Courts.findById(courtId);
+    const court = await Courts.findById(courtId);
     if (!court) return reply.status(404).send({ error: "Pista no encontrada" });
 
-    const club = Clubs.findById(court.clubId);
+    const club = await Clubs.findById(court.clubId);
     const userId = (req as any).userId as string;
     if (!club || club.ownerId !== userId) {
       return reply.status(403).send({ error: "Solo el dueño del club puede editar esta pista" });
     }
 
-    const updated = Courts.update(courtId, parsed.data);
+    const updated = await Courts.update(courtId, parsed.data);
     return reply.send(publicCourt(updated!));
   });
 
@@ -102,7 +103,7 @@ export default async function clubRoutes(app: FastifyInstance) {
     const parsed = updateClubHoursSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
-    const club = Clubs.findById(id);
+    const club = await Clubs.findById(id);
     if (!club) return reply.status(404).send({ error: "Club no encontrado" });
 
     const userId = (req as any).userId as string;
@@ -113,14 +114,14 @@ export default async function clubRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "La hora de cierre debe ser posterior a la de apertura" });
     }
 
-    const updated = Clubs.updateHours(id, parsed.data.openHour, parsed.data.closeHour);
-    return reply.send(publicClub(updated!, Courts.listByClub(id)));
+    const updated = await Clubs.updateHours(id, parsed.data.openHour, parsed.data.closeHour);
+    return reply.send(publicClub(updated!, await Courts.listByClub(id)));
   });
 
   // Lista todas las reservas de las pistas del club, para que el dueño las gestione.
   app.get("/clubs/:id/bookings", { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const club = Clubs.findById(id);
+    const club = await Clubs.findById(id);
     if (!club) return reply.status(404).send({ error: "Club no encontrado" });
 
     const userId = (req as any).userId as string;
@@ -128,7 +129,7 @@ export default async function clubRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "Solo el dueño del club puede ver sus reservas" });
     }
 
-    const bookings = Bookings.listByClub(id);
+    const bookings = await Bookings.listByClub(id);
     return reply.send(bookings.map(publicBooking));
   });
 
@@ -140,11 +141,11 @@ export default async function clubRoutes(app: FastifyInstance) {
     const { date } = req.query as { date?: string };
     if (!date) return reply.status(400).send({ error: "Falta el parámetro date (YYYY-MM-DD)" });
 
-    const court = Courts.findById(courtId);
+    const court = await Courts.findById(courtId);
     if (!court) return reply.status(404).send({ error: "Pista no encontrada" });
-    const club = Clubs.findById(court.clubId);
+    const club = await Clubs.findById(court.clubId);
 
-    const existing = Bookings.listByCourtAndDate(courtId, date);
+    const existing = await Bookings.listByCourtAndDate(courtId, date);
     const byStart = new Map(existing.map((b) => [b.startTime, b]));
 
     const openHour = club?.openHour ?? 8;

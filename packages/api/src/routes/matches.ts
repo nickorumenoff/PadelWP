@@ -21,21 +21,24 @@ const resultSchema = z.object({
   winnerTeam: z.union([z.literal(1), z.literal(2)]),
 });
 
-function serializeFull(matchId: string) {
-  const match = Matches.findById(matchId)!;
-  const players = MatchPlayers.listByMatch(matchId).map((p) => ({
-    ...p,
-    user: Users.findById(p.userId),
-  }));
-  const booking = Bookings.findById(match.bookingId);
+async function serializeFull(matchId: string) {
+  const match = (await Matches.findById(matchId))!;
+  const rawPlayers = await MatchPlayers.listByMatch(matchId);
+  const players = await Promise.all(
+    rawPlayers.map(async (p) => ({
+      ...p,
+      user: await Users.findById(p.userId),
+    }))
+  );
+  const booking = await Bookings.findById(match.bookingId);
   const base = publicMatch(match, players, booking);
 
   // Enriquecemos la reserva con la pista y el club para que la UI pueda mostrar
   // dónde se juega la partida sin hacer llamadas adicionales.
   let bookingWithCourt: any = base.booking;
   if (booking) {
-    const court = Courts.findById(booking.courtId);
-    const club = court ? Clubs.findById(court.clubId) : undefined;
+    const court = await Courts.findById(booking.courtId);
+    const club = court ? await Clubs.findById(court.clubId) : undefined;
     bookingWithCourt = {
       ...publicBooking(booking),
       court: court ? { ...publicCourt(court), club: club ? publicClub(club, []) : undefined } : undefined,
@@ -54,12 +57,12 @@ export default async function matchRoutes(app: FastifyInstance) {
       levelMax?: string;
     };
 
-    const matches = Matches.list({
+    const matches = await Matches.list({
       city,
       levelMin: levelMin ? Number(levelMin) : undefined,
       levelMax: levelMax ? Number(levelMax) : undefined,
     });
-    return reply.send(matches.map((m) => serializeFull(m.id)));
+    return reply.send(await Promise.all(matches.map((m) => serializeFull(m.id))));
   });
 
   app.post("/matches", { preHandler: requireAuth }, async (req, reply) => {
@@ -68,16 +71,16 @@ export default async function matchRoutes(app: FastifyInstance) {
     const userId = (req as any).userId as string;
     const { bookingId, type, levelMin, levelMax } = parsed.data;
 
-    const booking = Bookings.findById(bookingId);
+    const booking = await Bookings.findById(bookingId);
     if (!booking) return reply.status(404).send({ error: "Reserva no encontrada" });
 
-    const already = Matches.findByBookingId(bookingId);
+    const already = await Matches.findByBookingId(bookingId);
     if (already) return reply.status(409).send({ error: "Esa reserva ya tiene una partida asociada" });
 
-    const match = Matches.create({ bookingId, creatorId: userId, type, levelMin, levelMax });
-    MatchPlayers.create({ matchId: match.id, userId, team: 1 });
+    const match = await Matches.create({ bookingId, creatorId: userId, type, levelMin, levelMax });
+    await MatchPlayers.create({ matchId: match.id, userId, team: 1 });
 
-    return reply.send(serializeFull(match.id));
+    return reply.send(await serializeFull(match.id));
   });
 
   app.post("/matches/:id/join", { preHandler: requireAuth }, async (req, reply) => {
@@ -86,11 +89,11 @@ export default async function matchRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const userId = (req as any).userId as string;
 
-    const match = Matches.findById(id);
+    const match = await Matches.findById(id);
     if (!match) return reply.status(404).send({ error: "Partida no encontrada" });
     if (match.status !== "OPEN") return reply.status(409).send({ error: "La partida ya no admite jugadores" });
 
-    const players = MatchPlayers.listByMatch(id);
+    const players = await MatchPlayers.listByMatch(id);
     if (players.length >= 4) return reply.status(409).send({ error: "La partida ya está completa" });
     if (players.some((p) => p.userId === userId)) {
       return reply.status(409).send({ error: "Ya estás en esta partida" });
@@ -100,22 +103,22 @@ export default async function matchRoutes(app: FastifyInstance) {
     const teamCount = players.filter((p) => p.team === team).length;
     if (teamCount >= 2) return reply.status(409).send({ error: "Ese equipo ya está completo" });
 
-    MatchPlayers.create({ matchId: id, userId, team });
+    await MatchPlayers.create({ matchId: id, userId, team });
 
-    const updatedCount = MatchPlayers.listByMatch(id).length;
+    const updatedCount = (await MatchPlayers.listByMatch(id)).length;
     if (updatedCount >= 4) {
-      Matches.updateStatus(id, "FULL");
+      await Matches.updateStatus(id, "FULL");
     }
 
-    return reply.send(serializeFull(id));
+    return reply.send(await serializeFull(id));
   });
 
   // Partidas en las que el usuario autenticado participa (cualquier estado),
   // para que pueda ver su historial y registrar el resultado de las que jugó.
   app.get("/matches/mine", { preHandler: requireAuth }, async (req, reply) => {
     const userId = (req as any).userId as string;
-    const matches = Matches.listForUser(userId);
-    return reply.send(matches.map((m) => serializeFull(m.id)));
+    const matches = await Matches.listForUser(userId);
+    return reply.send(await Promise.all(matches.map((m) => serializeFull(m.id))));
   });
 
   // Registra el resultado de una partida completa (4 jugadores) y ajusta el
@@ -127,7 +130,7 @@ export default async function matchRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const userId = (req as any).userId as string;
 
-    const match = Matches.findById(id);
+    const match = await Matches.findById(id);
     if (!match) return reply.status(404).send({ error: "Partida no encontrada" });
     if (match.status === "COMPLETED") {
       return reply.status(409).send({ error: "Esta partida ya tiene un resultado registrado" });
@@ -136,7 +139,7 @@ export default async function matchRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: "La partida necesita 4 jugadores confirmados para reportar un resultado" });
     }
 
-    const players = MatchPlayers.listByMatch(id);
+    const players = await MatchPlayers.listByMatch(id);
     if (!players.some((p) => p.userId === userId)) {
       return reply.status(403).send({ error: "Solo un jugador de esta partida puede reportar el resultado" });
     }
@@ -146,7 +149,10 @@ export default async function matchRoutes(app: FastifyInstance) {
 
     const { winnerTeam } = parsed.data;
 
-    const usersById = new Map(players.map((p) => [p.userId, Users.findById(p.userId)!]));
+    const usersById = new Map<string, Awaited<ReturnType<typeof Users.findById>>>();
+    for (const p of players) {
+      usersById.set(p.userId, await Users.findById(p.userId));
+    }
     const team1 = players.filter((p) => p.team === 1);
     const team2 = players.filter((p) => p.team === 2);
     const avgLevel = (team: typeof players) =>
@@ -160,10 +166,10 @@ export default async function matchRoutes(app: FastifyInstance) {
       const won = onTeam1 ? winnerTeam === 1 : winnerTeam === 2;
       const currentLevel = usersById.get(p.userId)!.level;
       const newLevel = computeLevelAfterMatch({ currentLevel, opponentAvgLevel, won });
-      Users.updateLevel(p.userId, newLevel);
+      await Users.updateLevel(p.userId, newLevel);
     }
 
-    const updated = Matches.setResult(id, winnerTeam);
-    return reply.send(serializeFull(updated!.id));
+    const updated = await Matches.setResult(id, winnerTeam);
+    return reply.send(await serializeFull(updated!.id));
   });
 }

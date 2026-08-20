@@ -16,7 +16,7 @@ const createSponsorshipSchema = z.object({
 
 export default async function sponsorshipRoutes(app: FastifyInstance) {
   app.get("/sponsorships", async (_req, reply) => {
-    const sponsorships = Sponsorships.listActive();
+    const sponsorships = await Sponsorships.listActive();
     return reply.send(sponsorships.map(publicSponsorship));
   });
 
@@ -25,14 +25,14 @@ export default async function sponsorshipRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
     // Se crea como PENDING: pasa a ACTIVE cuando el pago asociado se verifica (flujo manual del admin).
-    const sponsorship = Sponsorships.create(parsed.data);
+    const sponsorship = await Sponsorships.create(parsed.data);
     return reply.send(publicSponsorship(sponsorship));
   });
 
   app.post("/sponsorships/:id/activate", { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const userId = (req as any).userId as string;
-    const admin = Users.findById(userId);
+    const admin = await Users.findById(userId);
     if (admin?.role !== "PLATFORM_ADMIN") {
       return reply.status(403).send({ error: "Solo un administrador puede activar patrocinios" });
     }
@@ -40,11 +40,11 @@ export default async function sponsorshipRoutes(app: FastifyInstance) {
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + 30);
 
-    const sponsorship = Sponsorships.activate(id, endDate.toISOString());
+    const sponsorship = await Sponsorships.activate(id, endDate.toISOString());
     if (!sponsorship) return reply.status(404).send({ error: "Patrocinio no encontrado" });
 
     if (sponsorship.clubId) {
-      Clubs.updateVisibilityPlan(sponsorship.clubId, "FEATURED");
+      await Clubs.updateVisibilityPlan(sponsorship.clubId, "FEATURED");
     }
 
     return reply.send(publicSponsorship(sponsorship));

@@ -23,13 +23,13 @@ export default async function paymentRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const userId = (req as any).userId as string;
 
-    const payment = Payments.create({ ...parsed.data, userId });
+    const payment = await Payments.create({ ...parsed.data, userId });
     return reply.send(publicPayment(payment));
   });
 
   app.get("/payments/me", { preHandler: requireAuth }, async (req, reply) => {
     const userId = (req as any).userId as string;
-    const payments = Payments.listByUser(userId);
+    const payments = await Payments.listByUser(userId);
     return reply.send(payments.map(publicPayment));
   });
 
@@ -39,12 +39,12 @@ export default async function paymentRoutes(app: FastifyInstance) {
     const { approve } = req.body as { approve: boolean };
     const userId = (req as any).userId as string;
 
-    const admin = Users.findById(userId);
+    const admin = await Users.findById(userId);
     if (admin?.role !== "PLATFORM_ADMIN") {
       return reply.status(403).send({ error: "Solo un administrador puede conciliar pagos" });
     }
 
-    const payment = Payments.updateStatus(id, approve ? "VERIFIED" : "REJECTED");
+    const payment = await Payments.updateStatus(id, approve ? "VERIFIED" : "REJECTED");
     if (!payment) return reply.status(404).send({ error: "Pago no encontrado" });
     return reply.send(publicPayment(payment));
   });
