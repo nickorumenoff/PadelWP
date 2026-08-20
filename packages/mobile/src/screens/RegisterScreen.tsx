@@ -30,6 +30,7 @@ export default function RegisterScreen({ navigation }: any) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [city, setCity] = useState("Caracas");
+  const [gender, setGender] = useState<"MASCULINO" | "FEMENINO" | "">("");
 
   const [dominantArm, setDominantArm] = useState<DominantArm>("DERECHA");
   const [frequency, setFrequency] = useState<PlayFrequency>("SEMANAL");
@@ -58,6 +59,7 @@ export default function RegisterScreen({ navigation }: any) {
         email,
         password,
         city,
+        gender: gender || undefined,
         dominantArm,
         frequency,
         yearsPlaying: Number(yearsPlaying) || 0,
@@ -89,7 +91,17 @@ export default function RegisterScreen({ navigation }: any) {
           />
           <TextInput style={styles.input} placeholder="Contraseña" secureTextEntry value={password} onChangeText={setPassword} />
           <TextInput style={styles.input} placeholder="Ciudad" value={city} onChangeText={setCity} />
-          <Pressable style={styles.button} onPress={() => setStep(2)}>
+          <Text style={styles.label}>Género (opcional, para torneos por categoría)</Text>
+          <View style={styles.row}>
+            {(["MASCULINO", "FEMENINO"] as const).map((v) => (
+              <Pressable key={v} onPress={() => setGender(gender === v ? "" : v)} style={[styles.chip, gender === v && styles.chipActive]}>
+                <Text style={[styles.chipText, gender === v && styles.chipTextActive]}>
+                  {v === "MASCULINO" ? "Masculino" : "Femenino"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable style={[styles.button, { marginTop: 14 }]} onPress={() => setStep(2)}>
             <Text style={styles.buttonText}>Continuar a la encuesta</Text>
           </Pressable>
         </View>
