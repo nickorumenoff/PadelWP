@@ -10,7 +10,8 @@
     "dev:web": "pnpm --filter @padel-ve/web dev",
     "build:shared": "pnpm --filter @padel-ve/shared build",
     "db:seed": "pnpm --filter @padel-ve/api db:seed",
-    "start": "pnpm --filter @padel-ve/api db:seed && pnpm --filter @padel-ve/api start"
+    "start": "pnpm --filter @padel-ve/api db:seed && pnpm --filter @padel-ve/api start",
+    "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
     "typescript": "^5.5.4"
