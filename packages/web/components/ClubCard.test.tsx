@@ -57,4 +57,14 @@ describe("ClubCard", () => {
     render(<ClubCard club={makeClub({ id: "club_42" })} />);
     expect(screen.getByRole("link")).toHaveAttribute("href", "/clubs/club_42");
   });
+
+  it("muestra la calificación promedio y el número de reseñas cuando el club tiene reseñas", () => {
+    render(<ClubCard club={makeClub({ avgRating: 4.5, reviewCount: 8 })} />);
+    expect(screen.getByText("4.5 (8)")).toBeInTheDocument();
+  });
+
+  it("no muestra calificación cuando el club no tiene reseñas todavía", () => {
+    render(<ClubCard club={makeClub({ avgRating: 0, reviewCount: 0 })} />);
+    expect(screen.queryByText(/\(0\)/)).not.toBeInTheDocument();
+  });
 });

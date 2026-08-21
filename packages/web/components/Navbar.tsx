@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/providers";
+import NotificationBell from "./NotificationBell";
 
 const baseLinks = [
   { href: "/", label: "Explorar" },
@@ -48,6 +49,7 @@ export default function Navbar() {
         <div className="flex items-center gap-3">
           {!loading && user ? (
             <>
+              <NotificationBell />
               <Link href="/profile" className="text-sm font-medium text-ink hover:text-brand-blue">
                 {user.name.split(" ")[0]}
                 <span className="ml-2 badge-green">Nivel {user.level.toFixed(2)}</span>

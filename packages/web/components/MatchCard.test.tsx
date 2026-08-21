@@ -107,4 +107,49 @@ describe("MatchCard", () => {
     render(<MatchCard match={completed} />);
     expect(screen.getByText(/Finalizada · Ganó equipo 2/)).toBeInTheDocument();
   });
+
+  it("muestra 'Cancelada' cuando la partida fue cancelada", () => {
+    mockUseAuth.mockReturnValue({ user: null });
+    const cancelled = makeMatch({ status: "CANCELLED" });
+    render(<MatchCard match={cancelled} />);
+    expect(screen.getByText("Cancelada")).toBeInTheDocument();
+  });
+
+  it("muestra 'Cancelar partida' solo al creador de una partida activa, y la confirmación dispara onCancel", () => {
+    mockUseAuth.mockReturnValue({ user: makeUser({ id: "user_1" }) }); // user_1 = creatorId por defecto
+    const onCancel = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<MatchCard match={makeMatch()} onCancel={onCancel} />);
+    screen.getByText("Cancelar partida").click();
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledWith("match_1");
+    confirmSpy.mockRestore();
+  });
+
+  it("no muestra 'Cancelar partida' a un usuario que no es el creador", () => {
+    mockUseAuth.mockReturnValue({ user: makeUser({ id: "other_user" }) });
+    render(<MatchCard match={makeMatch()} onCancel={vi.fn()} />);
+    expect(screen.queryByText("Cancelar partida")).not.toBeInTheDocument();
+  });
+
+  it("muestra 'Salir de la partida' a un jugador inscrito que no es el creador", () => {
+    mockUseAuth.mockReturnValue({ user: makeUser({ id: "me" }) });
+    const onLeave = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const match = makeMatch({
+      creatorId: "someone_else",
+      players: [{ id: "mp1", matchId: "match_1", userId: "me", team: 1, confirmed: true, user: makeUser({ id: "me" }) }] as any,
+    });
+    render(<MatchCard match={match} onLeave={onLeave} />);
+    screen.getByText("Salir de la partida").click();
+    expect(onLeave).toHaveBeenCalledWith("match_1");
+    confirmSpy.mockRestore();
+  });
+
+  it("no muestra los botones de cancelar/salir en una partida ya finalizada o cancelada", () => {
+    mockUseAuth.mockReturnValue({ user: makeUser({ id: "user_1" }) });
+    render(<MatchCard match={makeMatch({ status: "COMPLETED" })} onCancel={vi.fn()} onLeave={vi.fn()} />);
+    expect(screen.queryByText("Cancelar partida")).not.toBeInTheDocument();
+    expect(screen.queryByText("Salir de la partida")).not.toBeInTheDocument();
+  });
 });

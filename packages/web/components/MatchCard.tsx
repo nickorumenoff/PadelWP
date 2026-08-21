@@ -7,11 +7,15 @@ export default function MatchCard({
   match,
   onJoin,
   onSubmitResult,
+  onCancel,
+  onLeave,
   highlighted,
 }: {
   match: Match;
   onJoin?: (matchId: string, team: 1 | 2) => void;
   onSubmitResult?: (matchId: string, winnerTeam: 1 | 2) => void;
+  onCancel?: (matchId: string) => void;
+  onLeave?: (matchId: string) => void;
   highlighted?: boolean;
 }) {
   const { user } = useAuth();
@@ -20,6 +24,10 @@ export default function MatchCard({
   const team2 = players.filter((p) => p.team === 2);
   const alreadyIn = players.some((p) => p.userId === user?.id);
   const canReportResult = onSubmitResult && match.status === "FULL" && alreadyIn;
+  const isCreator = !!user && match.creatorId === user.id;
+  const isActive = match.status === "OPEN" || match.status === "FULL";
+  const canCancel = onCancel && isCreator && isActive;
+  const canLeave = onLeave && !isCreator && alreadyIn && isActive;
   const booking = match.booking as any;
   const club = booking?.court?.club;
   const courtName = booking?.court?.name;
@@ -69,9 +77,11 @@ export default function MatchCard({
         <span>
           {match.status === "COMPLETED"
             ? `Finalizada · Ganó equipo ${match.winnerTeam}`
-            : match.status === "FULL"
-              ? "Completa"
-              : "Buscando jugadores"}
+            : match.status === "CANCELLED"
+              ? "Cancelada"
+              : match.status === "FULL"
+                ? "Completa"
+                : "Buscando jugadores"}
         </span>
       </div>
 
@@ -89,6 +99,31 @@ export default function MatchCard({
           >
             Ganó equipo 2
           </button>
+        </div>
+      )}
+
+      {(canCancel || canLeave) && (
+        <div className="mt-3 border-t border-line pt-3">
+          {canCancel && (
+            <button
+              onClick={() => {
+                if (confirm("¿Cancelar esta partida? Se liberará el horario reservado.")) onCancel!(match.id);
+              }}
+              className="w-full rounded-lg border border-red-200 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+            >
+              Cancelar partida
+            </button>
+          )}
+          {canLeave && (
+            <button
+              onClick={() => {
+                if (confirm("¿Salir de esta partida?")) onLeave!(match.id);
+              }}
+              className="w-full rounded-lg border border-red-200 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+            >
+              Salir de la partida
+            </button>
+          )}
         </div>
       )}
     </div>

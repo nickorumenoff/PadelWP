@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Club } from "@padel-ve/shared";
+import StarRating from "./StarRating";
 
 const planLabel: Record<string, string> = {
   PREMIUM: "Club Premium",
@@ -26,6 +27,14 @@ export default function ClubCard({ club }: { club: Club }) {
           )}
         </div>
         <p className="mt-1 text-sm text-muted">{club.city}</p>
+        {!!club.reviewCount && (
+          <div className="mt-1 flex items-center gap-1 text-xs text-muted">
+            <StarRating value={club.avgRating ?? 0} size="text-xs" />
+            <span>
+              {club.avgRating?.toFixed(1)} ({club.reviewCount})
+            </span>
+          </div>
+        )}
         <p className="mt-2 line-clamp-2 text-sm text-muted">{club.description}</p>
         <div className="mt-3 flex items-center justify-between text-sm">
           <span className="text-muted">{club.courts?.length ?? 0} pista(s)</span>

@@ -31,6 +31,7 @@ export default function VenezuelaPaymentForm({
   const [currency, setCurrency] = useState<"USD" | "VES">("USD");
   const [method, setMethod] = useState<(typeof methods)[number]["value"]>("PAGO_MOVIL");
   const [reference, setReference] = useState("");
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,16 @@ export default function VenezuelaPaymentForm({
     setSubmitting(true);
     setError(null);
     try {
-      await api.submitPayment({ amount, currency, method, reference, purpose, relatedId });
+      const payment = await api.submitPayment({ amount, currency, method, reference, purpose, relatedId });
+      if (proofFile) {
+        try {
+          const formData = new FormData();
+          formData.append("proof", proofFile);
+          await api.uploadPaymentProof(payment.id, formData);
+        } catch {
+          // El pago ya quedó registrado; el comprobante es un extra, no bloqueamos el flujo.
+        }
+      }
       setDone(true);
       onDone?.();
     } catch {
@@ -98,6 +108,16 @@ export default function VenezuelaPaymentForm({
           value={reference}
           onChange={(e) => setReference(e.target.value)}
         />
+      </div>
+      <div>
+        <label className="label">Comprobante (foto o PDF, opcional)</label>
+        <input
+          className="input"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+          onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+        />
+        {proofFile && <p className="mt-1 text-xs text-muted">{proofFile.name}</p>}
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" disabled={submitting} className="btn-accent w-full">
