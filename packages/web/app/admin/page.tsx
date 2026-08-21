@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Club, Tournament } from "@padel-ve/shared";
-import { api } from "@/lib/api";
+import type { AdSlot, Club, Tournament } from "@padel-ve/shared";
+import { api, resolveUploadUrl } from "@/lib/api";
 import { useAuth } from "@/app/providers";
 
 export default function AdminPage() {
@@ -12,6 +12,18 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [adSlots, setAdSlots] = useState<AdSlot[]>([]);
+  const [loadingAdSlots, setLoadingAdSlots] = useState(true);
+
+  function loadAdSlots() {
+    setLoadingAdSlots(true);
+    api
+      .listAllAdSlots()
+      .then(setAdSlots)
+      .catch(() => setAdSlots([]))
+      .finally(() => setLoadingAdSlots(false));
+  }
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -28,6 +40,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
+      setLoadingAdSlots(false);
       return;
     }
     Promise.all([api.listTournaments(), api.listClubs()])
@@ -36,6 +49,8 @@ export default function AdminPage() {
         setClubs(c);
       })
       .finally(() => setLoading(false));
+    loadAdSlots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
   async function handleCreate(e: React.FormEvent) {
@@ -195,6 +210,108 @@ export default function AdminPage() {
           </div>
         </section>
       </div>
+
+      <section>
+        <h2 className="text-lg font-semibold text-ink">Espacios publicitarios</h2>
+        <p className="mt-1 text-sm text-muted">
+          4 espacios fijos que puedes activar/desactivar, con foto, título y un poco de texto. Aparecen en inicio y
+          en la página de patrocinadores. No llevan seguimiento de pago (coexisten con el autoservicio de
+          patrocinios de arriba).
+        </p>
+        {loadingAdSlots && <p className="mt-3 text-sm text-muted">Cargando…</p>}
+        {!loadingAdSlots && (
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            {adSlots.map((slot) => (
+              <AdSlotCard key={slot.position} slot={slot} onSaved={loadAdSlots} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function AdSlotCard({ slot, onSaved }: { slot: AdSlot; onSaved: () => void }) {
+  const [title, setTitle] = useState(slot.title || "");
+  const [text, setText] = useState(slot.text || "");
+  const [linkUrl, setLinkUrl] = useState(slot.linkUrl || "");
+  const [active, setActive] = useState(slot.active);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.updateAdSlot(slot.position, {
+        title: title || null,
+        text: text || null,
+        linkUrl: linkUrl || null,
+        active,
+      });
+      onSaved();
+    } catch {
+      setError("No se pudo guardar el espacio.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      await api.uploadAdSlotImage(slot.position, formData);
+      onSaved();
+    } catch {
+      setError("No se pudo subir la imagen.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex items-center justify-between">
+        <p className="font-semibold text-ink">Espacio {slot.position}</p>
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          Activo
+        </label>
+      </div>
+
+      {slot.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={resolveUploadUrl(slot.imageUrl)} alt="" className="h-24 w-full rounded-lg object-cover" />
+      )}
+      <div>
+        <label className="label">Imagen</label>
+        <input className="input" type="file" accept="image/*" onChange={handleImage} disabled={uploading} />
+      </div>
+
+      <div>
+        <label className="label">Título</label>
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} />
+      </div>
+      <div>
+        <label className="label">Texto</label>
+        <textarea className="input" rows={2} value={text} onChange={(e) => setText(e.target.value)} maxLength={280} />
+      </div>
+      <div>
+        <label className="label">Enlace (opcional)</label>
+        <input className="input" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="button" className="btn-primary w-full" onClick={handleSave} disabled={saving}>
+        {saving ? "Guardando…" : "Guardar"}
+      </button>
     </div>
   );
 }
