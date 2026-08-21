@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { Bookings, Clubs, Courts } from "../repositories";
+import { Bookings, Clubs, Courts, Reviews } from "../repositories";
 import { requireAuth } from "../auth";
 import { publicBooking, publicClub, publicCourt } from "../serializers";
 
@@ -41,7 +41,9 @@ export default async function clubRoutes(app: FastifyInstance) {
     const { city } = req.query as { city?: string };
     const clubs = await Clubs.listApproved(city);
     clubs.sort((a, b) => planOrder[a.visibilityPlan] - planOrder[b.visibilityPlan]);
-    const withCourts = await Promise.all(clubs.map(async (c) => publicClub(c, await Courts.listByClub(c.id))));
+    const withCourts = await Promise.all(
+      clubs.map(async (c) => publicClub(c, await Courts.listByClub(c.id), await Reviews.summaryByClub(c.id)))
+    );
     return reply.send(withCourts);
   });
 
@@ -49,7 +51,7 @@ export default async function clubRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const club = await Clubs.findById(id);
     if (!club) return reply.status(404).send({ error: "Club no encontrado" });
-    return reply.send(publicClub(club, await Courts.listByClub(club.id)));
+    return reply.send(publicClub(club, await Courts.listByClub(club.id), await Reviews.summaryByClub(club.id)));
   });
 
   app.post("/clubs", { preHandler: requireAuth }, async (req, reply) => {
@@ -133,6 +135,58 @@ export default async function clubRoutes(app: FastifyInstance) {
     return reply.send(bookings.map(publicBooking));
   });
 
+  // Reporte de ocupación e ingreso estimado para el dueño del club. "Estimado"
+  // porque hoy reservar una pista no dispara un pago dentro de la app (los clubes
+  // cobran aparte) — se calcula como precio/hora × reservas activas, no como
+  // dinero verificado. Sirve para que el dueño vea qué tan lleno está y qué
+  // pistas/horarios rinden más.
+  app.get("/clubs/:id/report", { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { days } = req.query as { days?: string };
+    const periodDays = Math.min(Math.max(Number(days) || 30, 1), 365);
+
+    const club = await Clubs.findById(id);
+    if (!club) return reply.status(404).send({ error: "Club no encontrado" });
+
+    const userId = (req as any).userId as string;
+    if (club.ownerId !== userId) {
+      return reply.status(403).send({ error: "Solo el dueño del club puede ver su reporte" });
+    }
+
+    const courts = await Courts.listByClub(id);
+    const since = new Date();
+    since.setDate(since.getDate() - periodDays);
+    const sinceIso = since.toISOString().slice(0, 10);
+
+    const bookings = await Bookings.listByClubSince(id, sinceIso);
+
+    const hoursPerDay = Math.max(club.closeHour - club.openHour, 1);
+    const totalSlots = courts.length * hoursPerDay * periodDays;
+    const totalBookings = bookings.length;
+    const estimatedRevenueUsd = bookings.reduce((sum, b) => sum + b.pricePerHourUsd, 0);
+    const occupancyRate = totalSlots > 0 ? totalBookings / totalSlots : 0;
+
+    const byCourt = courts.map((court) => {
+      const courtBookings = bookings.filter((b) => b.courtId === court.id);
+      const courtSlots = hoursPerDay * periodDays;
+      return {
+        courtId: court.id,
+        courtName: court.name,
+        bookings: courtBookings.length,
+        estimatedRevenueUsd: courtBookings.reduce((sum, b) => sum + b.pricePerHourUsd, 0),
+        occupancyRate: courtSlots > 0 ? courtBookings.length / courtSlots : 0,
+      };
+    });
+
+    return reply.send({
+      periodDays,
+      totalBookings,
+      estimatedRevenueUsd,
+      occupancyRate,
+      byCourt,
+    });
+  });
+
   // Disponibilidad de una pista para una fecha: genera franjas de 1h dentro del
   // horario que el club haya publicado (openHour-closeHour), marcando como
   // BOOKED las que ya tengan una reserva.
@@ -146,7 +200,9 @@ export default async function clubRoutes(app: FastifyInstance) {
     const club = await Clubs.findById(court.clubId);
 
     const existing = await Bookings.listByCourtAndDate(courtId, date);
-    const byStart = new Map(existing.map((b) => [b.startTime, b]));
+    // Una reserva cancelada libera el horario: se excluye para que vuelva a
+    // aparecer como disponible en vez de bloqueado.
+    const byStart = new Map(existing.filter((b) => b.status !== "CANCELLED").map((b) => [b.startTime, b]));
 
     const openHour = club?.openHour ?? 8;
     const closeHour = club?.closeHour ?? 22;

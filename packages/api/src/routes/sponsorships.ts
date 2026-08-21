@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { Clubs, Sponsorships, Users } from "../repositories";
+import { Clubs, Notifications, Sponsorships, Users } from "../repositories";
 import { requireAuth } from "../auth";
 import { publicSponsorship } from "../serializers";
 
@@ -23,9 +23,10 @@ export default async function sponsorshipRoutes(app: FastifyInstance) {
   app.post("/sponsorships", { preHandler: requireAuth }, async (req, reply) => {
     const parsed = createSponsorshipSchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+    const userId = (req as any).userId as string;
 
     // Se crea como PENDING: pasa a ACTIVE cuando el pago asociado se verifica (flujo manual del admin).
-    const sponsorship = await Sponsorships.create(parsed.data);
+    const sponsorship = await Sponsorships.create({ ...parsed.data, requestedBy: userId });
     return reply.send(publicSponsorship(sponsorship));
   });
 
@@ -45,6 +46,15 @@ export default async function sponsorshipRoutes(app: FastifyInstance) {
 
     if (sponsorship.clubId) {
       await Clubs.updateVisibilityPlan(sponsorship.clubId, "FEATURED");
+    }
+
+    if (sponsorship.requestedBy) {
+      await Notifications.create({
+        userId: sponsorship.requestedBy,
+        type: "SPONSORSHIP_ACTIVATED",
+        message: `Tu patrocinio "${sponsorship.planName}" ya está activo.`,
+        relatedId: sponsorship.id,
+      });
     }
 
     return reply.send(publicSponsorship(sponsorship));

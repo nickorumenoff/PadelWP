@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { computeLevelAfterMatch } from "@padel-ve/shared";
-import { Bookings, Clubs, Courts, MatchPlayers, Matches, Users } from "../repositories";
+import { Bookings, Clubs, Courts, MatchPlayers, Matches, Notifications, Users } from "../repositories";
 import { requireAuth } from "../auth";
 import { publicBooking, publicClub, publicCourt, publicMatch } from "../serializers";
 
@@ -109,6 +109,86 @@ export default async function matchRoutes(app: FastifyInstance) {
     if (updatedCount >= 4) {
       await Matches.updateStatus(id, "FULL");
     }
+
+    if (match.creatorId !== userId) {
+      const joiner = await Users.findById(userId);
+      await Notifications.create({
+        userId: match.creatorId,
+        type: "MATCH_JOINED",
+        message: `${joiner?.name ?? "Un jugador"} se unió a tu partida.`,
+        relatedId: id,
+      });
+    }
+
+    return reply.send(await serializeFull(id));
+  });
+
+  // Cancela toda la partida (solo quien la creó, y solo si no tiene resultado ya
+  // registrado). Como cada partida nace de una reserva 1:1, cancelarla libera
+  // también el horario reservado para que otro jugador pueda tomarlo.
+  app.post("/matches/:id/cancel", { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const userId = (req as any).userId as string;
+
+    const match = await Matches.findById(id);
+    if (!match) return reply.status(404).send({ error: "Partida no encontrada" });
+    if (match.creatorId !== userId) {
+      return reply.status(403).send({ error: "Solo quien creó la partida puede cancelarla" });
+    }
+    if (match.status === "COMPLETED") {
+      return reply.status(409).send({ error: "No se puede cancelar una partida que ya tiene resultado" });
+    }
+    if (match.status === "CANCELLED") {
+      return reply.status(409).send({ error: "Esta partida ya está cancelada" });
+    }
+
+    const players = (await MatchPlayers.listByMatch(id)).filter((p) => p.userId !== userId);
+    await Promise.all(
+      players.map((p) =>
+        Notifications.create({
+          userId: p.userId,
+          type: "MATCH_CANCELLED",
+          message: "Se canceló una partida en la que estabas anotado.",
+          relatedId: id,
+        })
+      )
+    );
+
+    await Matches.cancel(id);
+    await Bookings.cancel(match.bookingId);
+
+    return reply.send(await serializeFull(id));
+  });
+
+  // Un jugador (que no sea el creador) se retira de una partida abierta/completa
+  // sin resultado. Si la partida estaba llena, vuelve a quedar abierta.
+  app.post("/matches/:id/leave", { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const userId = (req as any).userId as string;
+
+    const match = await Matches.findById(id);
+    if (!match) return reply.status(404).send({ error: "Partida no encontrada" });
+    if (match.status === "COMPLETED" || match.status === "CANCELLED") {
+      return reply.status(409).send({ error: "Esta partida ya no admite cambios" });
+    }
+    if (match.creatorId === userId) {
+      return reply.status(400).send({ error: "Quien creó la partida debe cancelarla en vez de salir" });
+    }
+    const inMatch = await MatchPlayers.isPlayerInMatch(id, userId);
+    if (!inMatch) return reply.status(409).send({ error: "No estás anotado en esta partida" });
+
+    await MatchPlayers.remove(id, userId);
+    if (match.status === "FULL") {
+      await Matches.updateStatus(id, "OPEN");
+    }
+
+    const leaver = await Users.findById(userId);
+    await Notifications.create({
+      userId: match.creatorId,
+      type: "MATCH_LEFT",
+      message: `${leaver?.name ?? "Un jugador"} salió de tu partida.`,
+      relatedId: id,
+    });
 
     return reply.send(await serializeFull(id));
   });
