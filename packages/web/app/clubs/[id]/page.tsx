@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import type { Booking, Club, Court } from "@padel-ve/shared";
+import type { Booking, Club, Court, Review } from "@padel-ve/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/app/providers";
+import StarRating from "@/components/StarRating";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -28,12 +29,61 @@ export default function ClubDetailPage() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [myRating, setMyRating] = useState<1 | 2 | 3 | 4 | 5 | 0>(0);
+  const [myComment, setMyComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+
+  function loadClub() {
     api.getClub(id).then((c) => {
       setClub(c);
-      setSelectedCourt(c.courts?.[0] ?? null);
+      setSelectedCourt((prev) => prev ?? c.courts?.[0] ?? null);
     });
+  }
+
+  function loadReviews() {
+    api.listClubReviews(id).then(setReviews);
+  }
+
+  useEffect(() => {
+    loadClub();
+    loadReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    const mine = reviews.find((r) => r.userId === user?.id);
+    if (mine) {
+      setMyRating(mine.rating);
+      setMyComment(mine.comment ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviews, user]);
+
+  async function submitReview(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    if (!myRating) {
+      setReviewMessage("Elige una calificación de 1 a 5 estrellas.");
+      return;
+    }
+    setSubmittingReview(true);
+    setReviewMessage(null);
+    try {
+      await api.createClubReview(id, { rating: myRating, comment: myComment || undefined });
+      setReviewMessage("¡Gracias por tu reseña!");
+      loadReviews();
+      loadClub();
+    } catch {
+      setReviewMessage("No se pudo enviar la reseña.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  }
 
   useEffect(() => {
     if (!selectedCourt) return;
@@ -74,6 +124,14 @@ export default function ClubDetailPage() {
       <div>
         <p className="text-sm text-brand-blue">{club.city}</p>
         <h1 className="text-2xl font-semibold text-ink">{club.name}</h1>
+        {!!club.reviewCount && (
+          <div className="mt-1 flex items-center gap-2 text-sm text-muted">
+            <StarRating value={club.avgRating ?? 0} />
+            <span>
+              {club.avgRating?.toFixed(1)} · {club.reviewCount} reseña{club.reviewCount === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
         <p className="mt-2 max-w-2xl text-muted">{club.description}</p>
         <p className="mt-1 text-sm text-muted">{club.address}</p>
       </div>
@@ -138,6 +196,44 @@ export default function ClubDetailPage() {
             Al reservar se crea automáticamente una partida abierta para que otros jugadores puedan unirse. Puedes
             gestionarla después desde la sección de Partidas.
           </p>
+        </div>
+      </div>
+
+      <div className="border-t border-line pt-8">
+        <h2 className="text-lg font-semibold text-ink">Reseñas</h2>
+
+        {user ? (
+          <form onSubmit={submitReview} className="card mt-4 space-y-3 p-4">
+            <p className="label !mb-0">Tu calificación</p>
+            <StarRating value={myRating} onChange={setMyRating} size="text-2xl" />
+            <textarea
+              value={myComment}
+              onChange={(e) => setMyComment(e.target.value)}
+              placeholder="Cuéntanos tu experiencia en este club (opcional)"
+              className="input min-h-[80px] resize-y"
+            />
+            {reviewMessage && <p className="text-sm text-brand-blue">{reviewMessage}</p>}
+            <button type="submit" disabled={submittingReview} className="btn-primary">
+              {submittingReview ? "Enviando…" : "Enviar reseña"}
+            </button>
+          </form>
+        ) : (
+          <p className="mt-3 rounded-lg bg-brand-blue-50 p-3 text-sm text-brand-blue">
+            Inicia sesión para dejar una reseña de este club.
+          </p>
+        )}
+
+        <div className="mt-6 space-y-3">
+          {reviews.length === 0 && <p className="text-sm text-muted">Todavía no hay reseñas para este club.</p>}
+          {reviews.map((r) => (
+            <div key={r.id} className="card p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-ink">{r.user?.name ?? "Jugador"}</p>
+                <StarRating value={r.rating} size="text-sm" />
+              </div>
+              {r.comment && <p className="mt-1 text-sm text-muted">{r.comment}</p>}
+            </div>
+          ))}
         </div>
       </div>
     </div>
