@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View, StyleSheet } from "react-native";
-import type { Booking, Club, CourtType } from "@padel-ve/shared";
+import type { Booking, Club, ClubReport, CourtType } from "@padel-ve/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme";
@@ -36,6 +36,10 @@ export default function ClubAdminScreen() {
   const [savingHours, setSavingHours] = useState(false);
   const [showPlanPayment, setShowPlanPayment] = useState(false);
 
+  const [report, setReport] = useState<ClubReport | null>(null);
+  const [reportDays, setReportDays] = useState(30);
+  const [loadingReport, setLoadingReport] = useState(false);
+
   async function load() {
     if (!user) {
       setLoading(false);
@@ -64,6 +68,17 @@ export default function ClubAdminScreen() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  useEffect(() => {
+    if (!myClub) return;
+    setLoadingReport(true);
+    api
+      .getClubReport(myClub.id, reportDays)
+      .then(setReport)
+      .catch(() => setReport(null))
+      .finally(() => setLoadingReport(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myClub?.id, reportDays]);
 
   async function createClub() {
     try {
@@ -240,6 +255,45 @@ export default function ClubAdminScreen() {
       ))}
       {bookings.length === 0 && <Text style={styles.helperText}>Aún no tienes reservas.</Text>}
 
+      <Text style={styles.sectionLabel}>Reporte de ocupación e ingresos</Text>
+      <Text style={styles.helperText}>
+        Ingresos estimados a partir de las reservas activas (los pagos se cobran directamente en el club).
+      </Text>
+      <View style={[styles.wrapRow, { marginTop: 8 }]}>
+        {[7, 30, 90].map((d) => (
+          <Pressable key={d} onPress={() => setReportDays(d)} style={[styles.chip, reportDays === d && styles.chipActive]}>
+            <Text style={[styles.chipText, reportDays === d && styles.chipTextActive]}>Últimos {d} días</Text>
+          </Pressable>
+        ))}
+      </View>
+      {loadingReport && <Text style={styles.helperText}>Calculando…</Text>}
+      {!loadingReport && report && (
+        <>
+          <View style={styles.reportRow}>
+            <View style={styles.reportStat}>
+              <Text style={styles.reportStatLabel}>Reservas</Text>
+              <Text style={styles.reportStatValue}>{report.totalBookings}</Text>
+            </View>
+            <View style={styles.reportStat}>
+              <Text style={styles.reportStatLabel}>Ingreso estimado</Text>
+              <Text style={styles.reportStatValue}>${report.estimatedRevenueUsd.toFixed(0)}</Text>
+            </View>
+            <View style={styles.reportStat}>
+              <Text style={styles.reportStatLabel}>Ocupación</Text>
+              <Text style={styles.reportStatValue}>{(report.occupancyRate * 100).toFixed(0)}%</Text>
+            </View>
+          </View>
+          {report.byCourt.map((c) => (
+            <View key={c.courtId} style={styles.listRow}>
+              <Text style={styles.listRowText}>{c.courtName}</Text>
+              <Text style={styles.listRowText}>
+                {c.bookings} · ${c.estimatedRevenueUsd.toFixed(0)} · {(c.occupancyRate * 100).toFixed(0)}%
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
+
       <Text style={styles.sectionLabel}>Visibilidad destacada</Text>
       <Text style={styles.helperText}>
         Paga por un plan de visibilidad para que tu club aparezca primero en los resultados de búsqueda.
@@ -309,4 +363,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   listRowText: { fontSize: 12, color: colors.ink },
+  reportRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  reportStat: { flex: 1, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 10 },
+  reportStatLabel: { fontSize: 10, fontWeight: "700", color: colors.muted, textTransform: "uppercase" },
+  reportStatValue: { fontSize: 16, fontWeight: "700", color: colors.ink, marginTop: 2 },
 });

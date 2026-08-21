@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View, StyleSheet } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../lib/api";
 import { colors } from "../theme";
 
 const frequencyLabel: Record<string, string> = {
@@ -14,6 +15,15 @@ const frequencyLabel: Record<string, string> = {
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    api
+      .listNotifications()
+      .then((ns) => setUnreadCount(ns.filter((n) => !n.read).length))
+      .catch(() => {});
+  }, [user]);
 
   if (!user) return null;
 
@@ -43,6 +53,23 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={[styles.statValue, { fontSize: 12 }]}>{frequencyLabel[user.frequency ?? ""] ?? "—"}</Text>
         </View>
       </View>
+
+      <Pressable style={styles.menuRow} onPress={() => navigation.navigate("Notifications")}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={styles.menuRowText}>Notificaciones</Text>
+          {unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.menuRowChevron}>›</Text>
+      </Pressable>
+
+      <Pressable style={styles.menuRow} onPress={() => navigation.navigate("Sponsors")}>
+        <Text style={styles.menuRowText}>Patrocinadores</Text>
+        <Text style={styles.menuRowChevron}>›</Text>
+      </Pressable>
 
       <Pressable style={styles.menuRow} onPress={() => navigation.navigate("ClubAdmin")}>
         <Text style={styles.menuRowText}>Mi club</Text>
@@ -87,6 +114,16 @@ const styles = StyleSheet.create({
   },
   menuRowText: { fontSize: 14, fontWeight: "600", color: colors.ink },
   menuRowChevron: { fontSize: 16, color: colors.muted },
+  unreadBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  unreadBadgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
   logoutBtn: { marginTop: 28, borderWidth: 1, borderColor: colors.line, borderRadius: 999, paddingVertical: 12, alignItems: "center" },
   logoutText: { fontSize: 13, fontWeight: "600", color: colors.ink },
 });

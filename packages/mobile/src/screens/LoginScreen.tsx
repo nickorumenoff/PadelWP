@@ -44,6 +44,10 @@ export default function LoginScreen({ navigation }: any) {
         <Text style={styles.buttonText}>Entrar</Text>
       </Pressable>
 
+      <Pressable onPress={() => navigation.navigate("ForgotPassword")}>
+        <Text style={styles.link}>¿Olvidaste tu contraseña?</Text>
+      </Pressable>
+
       <Pressable onPress={() => navigation.navigate("Register")}>
         <Text style={styles.link}>¿No tienes cuenta? Regístrate</Text>
       </Pressable>
