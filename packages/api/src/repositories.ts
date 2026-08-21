@@ -96,12 +96,41 @@ export interface SponsorshipRow {
   sponsorName: string;
   planName: string;
   clubId: string | null;
+  requestedBy: string | null;
   bannerUrl: string | null;
   linkUrl: string | null;
   startDate: string;
   endDate: string | null;
   status: string;
   amountPaidUsd: number;
+}
+
+export interface ReviewRow {
+  id: string;
+  clubId: string;
+  userId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+}
+
+export interface NotificationRow {
+  id: string;
+  userId: string;
+  type: string;
+  message: string;
+  relatedId: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface PasswordResetTokenRow {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: string;
+  usedAt: string | null;
+  createdAt: string;
 }
 
 export interface TournamentRow {
@@ -236,6 +265,9 @@ export const Users = {
   updateLevel(id: string, level: number): Promise<void> {
     return updateRow("users", "id", id, { level });
   },
+  updatePassword(id: string, passwordHash: string): Promise<void> {
+    return updateRow("users", "id", id, { passwordHash });
+  },
 };
 
 // ---------- Clubs ----------
@@ -336,8 +368,13 @@ export const Bookings = {
   findById(id: string): Promise<BookingRow | undefined> {
     return selectOne<BookingRow>("bookings", { id });
   },
-  findByCourtDateStart(courtId: string, date: string, startTime: string): Promise<BookingRow | undefined> {
-    return selectOne<BookingRow>("bookings", { courtId, date, startTime });
+  // Excluye canceladas: una reserva cancelada no debe seguir bloqueando el horario.
+  async findByCourtDateStart(courtId: string, date: string, startTime: string): Promise<BookingRow | undefined> {
+    const res = await pool.query(
+      `SELECT * FROM bookings WHERE "courtId" = $1 AND "date" = $2 AND "startTime" = $3 AND "status" != 'CANCELLED'`,
+      [courtId, date, startTime]
+    );
+    return res.rows[0] as BookingRow | undefined;
   },
   listByCourtAndDate(courtId: string, date: string): Promise<BookingRow[]> {
     return selectMany<BookingRow>("bookings", { courtId, date });
@@ -354,6 +391,22 @@ export const Bookings = {
       [clubId]
     );
     return res.rows as BookingRow[];
+  },
+  async cancel(id: string): Promise<BookingRow | undefined> {
+    await updateRow("bookings", "id", id, { status: "CANCELLED" });
+    return Bookings.findById(id);
+  },
+  // Reservas no canceladas de las pistas de un club desde una fecha (YYYY-MM-DD),
+  // usado para el reporte de ocupación/ingresos estimados.
+  async listByClubSince(clubId: string, sinceDate: string): Promise<(BookingRow & { pricePerHourUsd: number })[]> {
+    const res = await pool.query(
+      `SELECT b.*, c."pricePerHourUsd" as "pricePerHourUsd" FROM bookings b
+       JOIN courts c ON c."id" = b."courtId"
+       WHERE c."clubId" = $1 AND b."date" >= $2 AND b."status" != 'CANCELLED'
+       ORDER BY b."date" DESC`,
+      [clubId, sinceDate]
+    );
+    return res.rows as (BookingRow & { pricePerHourUsd: number })[];
   },
 };
 
@@ -383,6 +436,10 @@ export const Matches = {
   },
   updateStatus(id: string, status: string): Promise<void> {
     return updateRow("matches", "id", id, { status });
+  },
+  async cancel(id: string): Promise<MatchRow | undefined> {
+    await updateRow("matches", "id", id, { status: "CANCELLED" });
+    return Matches.findById(id);
   },
   async setResult(id: string, winnerTeam: 1 | 2): Promise<MatchRow | undefined> {
     await updateRow("matches", "id", id, { status: "COMPLETED", winnerTeam, completedAt: nowIso() });
@@ -444,6 +501,9 @@ export const MatchPlayers = {
     const row = await selectOne<{ id: string }>("match_players", { matchId, userId });
     return !!row;
   },
+  async remove(matchId: string, userId: string): Promise<void> {
+    await pool.query(`DELETE FROM match_players WHERE "matchId" = $1 AND "userId" = $2`, [matchId, userId]);
+  },
 };
 
 // ---------- Payments ----------
@@ -484,6 +544,10 @@ export const Payments = {
     await updateRow("payments", "id", id, { status });
     return Payments.findById(id);
   },
+  async setProofUrl(id: string, proofUrl: string): Promise<PaymentRow | undefined> {
+    await updateRow("payments", "id", id, { proofUrl });
+    return Payments.findById(id);
+  },
 };
 
 // ---------- Sponsorships ----------
@@ -493,6 +557,7 @@ export const Sponsorships = {
     sponsorName: string;
     planName: string;
     clubId?: string;
+    requestedBy?: string;
     bannerUrl?: string;
     linkUrl?: string;
   }): Promise<SponsorshipRow> {
@@ -501,6 +566,7 @@ export const Sponsorships = {
       sponsorName: input.sponsorName,
       planName: input.planName,
       clubId: input.clubId ?? null,
+      requestedBy: input.requestedBy ?? null,
       bannerUrl: input.bannerUrl ?? null,
       linkUrl: input.linkUrl ?? null,
       startDate: nowIso(),
@@ -519,6 +585,94 @@ export const Sponsorships = {
   async activate(id: string, endDate: string): Promise<SponsorshipRow | undefined> {
     await updateRow("sponsorships", "id", id, { status: "ACTIVE", endDate });
     return Sponsorships.findById(id);
+  },
+};
+
+// ---------- Reseñas de clubes ----------
+
+export const Reviews = {
+  // Upsert: si el usuario ya reseñó este club, se actualiza su reseña en vez de duplicarla.
+  async upsert(input: { clubId: string; userId: string; rating: number; comment?: string }): Promise<ReviewRow> {
+    const existing = await selectOne<ReviewRow>("reviews", { clubId: input.clubId, userId: input.userId });
+    if (existing) {
+      await updateRow2(
+        "reviews",
+        { clubId: input.clubId, userId: input.userId },
+        { rating: input.rating, comment: input.comment ?? null }
+      );
+      return (await selectOne<ReviewRow>("reviews", { clubId: input.clubId, userId: input.userId }))!;
+    }
+    const row: ReviewRow = {
+      id: newId("review"),
+      clubId: input.clubId,
+      userId: input.userId,
+      rating: input.rating,
+      comment: input.comment ?? null,
+      createdAt: nowIso(),
+    };
+    return insertRow("reviews", row);
+  },
+  listByClub(clubId: string): Promise<ReviewRow[]> {
+    return selectMany<ReviewRow>("reviews", { clubId }, `"createdAt" DESC`);
+  },
+  async summaryByClub(clubId: string): Promise<{ avgRating: number; reviewCount: number }> {
+    const res = await pool.query(
+      `SELECT COALESCE(AVG("rating"), 0) as avg, COUNT(*) as count FROM reviews WHERE "clubId" = $1`,
+      [clubId]
+    );
+    const row = res.rows[0];
+    return { avgRating: Number(row.avg), reviewCount: Number(row.count) };
+  },
+};
+
+// ---------- Notificaciones dentro de la app ----------
+
+export const Notifications = {
+  create(input: { userId: string; type: string; message: string; relatedId?: string }): Promise<NotificationRow> {
+    const row: NotificationRow = {
+      id: newId("notif"),
+      userId: input.userId,
+      type: input.type,
+      message: input.message,
+      relatedId: input.relatedId ?? null,
+      read: false,
+      createdAt: nowIso(),
+    };
+    return insertRow("notifications", row);
+  },
+  listByUser(userId: string): Promise<NotificationRow[]> {
+    return selectMany<NotificationRow>("notifications", { userId }, `"createdAt" DESC`);
+  },
+  markRead(id: string): Promise<void> {
+    return updateRow("notifications", "id", id, { read: true });
+  },
+  async markAllRead(userId: string): Promise<void> {
+    await pool.query(`UPDATE notifications SET "read" = true WHERE "userId" = $1`, [userId]);
+  },
+  findById(id: string): Promise<NotificationRow | undefined> {
+    return selectOne<NotificationRow>("notifications", { id });
+  },
+};
+
+// ---------- Tokens de recuperación de contraseña ----------
+
+export const PasswordResetTokens = {
+  create(input: { userId: string; tokenHash: string; expiresAt: string }): Promise<PasswordResetTokenRow> {
+    const row: PasswordResetTokenRow = {
+      id: newId("prt"),
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+      createdAt: nowIso(),
+    };
+    return insertRow("password_reset_tokens", row);
+  },
+  findByTokenHash(tokenHash: string): Promise<PasswordResetTokenRow | undefined> {
+    return selectOne<PasswordResetTokenRow>("password_reset_tokens", { tokenHash });
+  },
+  markUsed(id: string): Promise<void> {
+    return updateRow("password_reset_tokens", "id", id, { usedAt: nowIso() });
   },
 };
 

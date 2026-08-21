@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { publicBooking, publicCourt, publicMatch, publicUser } from "./serializers";
-import type { BookingRow, CourtRow, MatchPlayerRow, MatchRow, UserRow } from "./repositories";
+import {
+  publicBooking,
+  publicClub,
+  publicCourt,
+  publicMatch,
+  publicNotification,
+  publicReview,
+  publicUser,
+} from "./serializers";
+import type {
+  BookingRow,
+  ClubRow,
+  CourtRow,
+  MatchPlayerRow,
+  MatchRow,
+  NotificationRow,
+  ReviewRow,
+  UserRow,
+} from "./repositories";
 
 function makeUser(overrides: Partial<UserRow> = {}): UserRow {
   return {
@@ -124,5 +141,95 @@ describe("publicMatch", () => {
     const result = publicMatch(match);
     expect(result.players).toEqual([]);
     expect(result.booking).toBeUndefined();
+  });
+});
+
+function makeClub(overrides: Partial<ClubRow> = {}): ClubRow {
+  return {
+    id: "club_1",
+    ownerId: "owner_1",
+    name: "Las Mercedes Pádel Club",
+    description: "Club de pádel",
+    address: "Av. Principal",
+    city: "Caracas",
+    status: "APPROVED",
+    visibilityPlan: "NONE",
+    openHour: 8,
+    closeHour: 22,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  } as ClubRow;
+}
+
+describe("publicClub", () => {
+  it("usa 0/0 como calificación por defecto cuando no se pasa ratingSummary", () => {
+    const result = publicClub(makeClub());
+    expect(result.avgRating).toBe(0);
+    expect(result.reviewCount).toBe(0);
+  });
+
+  it("expone el promedio y conteo de reseñas cuando se pasan", () => {
+    const result = publicClub(makeClub(), [], { avgRating: 4.25, reviewCount: 12 });
+    expect(result.avgRating).toBe(4.25);
+    expect(result.reviewCount).toBe(12);
+  });
+
+  it("serializa las pistas anidadas con publicCourt", () => {
+    const court: CourtRow = {
+      id: "court_1",
+      clubId: "club_1",
+      name: "Pista 1",
+      type: "CRISTAL",
+      indoor: true,
+      lighting: false,
+      pricePerHourUsd: 25,
+    };
+    const result = publicClub(makeClub(), [court]);
+    expect(result.courts).toEqual([publicCourt(court)]);
+  });
+});
+
+describe("publicReview", () => {
+  it("expone los campos de la reseña y anida publicUser (sin passwordHash) cuando se pasa el usuario", () => {
+    const review: ReviewRow & { user?: UserRow } = {
+      id: "review_1",
+      clubId: "club_1",
+      userId: "user_1",
+      rating: 5,
+      comment: "Excelente club",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      user: makeUser(),
+    };
+    const result = publicReview(review);
+    expect(result).toMatchObject({ id: "review_1", clubId: "club_1", rating: 5, comment: "Excelente club" });
+    expect(result.user).not.toHaveProperty("passwordHash");
+  });
+
+  it("deja user undefined cuando no se pasa", () => {
+    const review: ReviewRow = {
+      id: "review_2",
+      clubId: "club_1",
+      userId: "user_2",
+      rating: 3,
+      comment: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(publicReview(review).user).toBeUndefined();
+  });
+});
+
+describe("publicNotification", () => {
+  it("convierte read a booleano explícito", () => {
+    const notification: NotificationRow = {
+      id: "notif_1",
+      userId: "user_1",
+      type: "MATCH_CANCELLED",
+      message: "Tu partida fue cancelada",
+      relatedId: "match_1",
+      read: 0 as any,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(publicNotification(notification).read).toBe(false);
+    expect(publicNotification({ ...notification, read: 1 as any }).read).toBe(true);
   });
 });

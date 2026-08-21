@@ -6,7 +6,9 @@ import type {
   GroupMatchRow,
   MatchPlayerRow,
   MatchRow,
+  NotificationRow,
   PaymentRow,
+  ReviewRow,
   SponsorshipRow,
   TournamentCategoryRow,
   TournamentGroupRow,
@@ -48,7 +50,11 @@ export function publicCourt(c: CourtRow) {
   };
 }
 
-export function publicClub(c: ClubRow, courts: CourtRow[] = []) {
+export function publicClub(
+  c: ClubRow,
+  courts: CourtRow[] = [],
+  ratingSummary: { avgRating: number; reviewCount: number } = { avgRating: 0, reviewCount: 0 }
+) {
   return {
     id: c.id,
     ownerId: c.ownerId,
@@ -62,6 +68,32 @@ export function publicClub(c: ClubRow, courts: CourtRow[] = []) {
     closeHour: c.closeHour,
     createdAt: c.createdAt,
     courts: courts.map(publicCourt),
+    avgRating: ratingSummary.avgRating,
+    reviewCount: ratingSummary.reviewCount,
+  };
+}
+
+export function publicReview(r: ReviewRow & { user?: UserRow }) {
+  return {
+    id: r.id,
+    clubId: r.clubId,
+    userId: r.userId,
+    rating: r.rating,
+    comment: r.comment,
+    createdAt: r.createdAt,
+    user: r.user ? publicUser(r.user) : undefined,
+  };
+}
+
+export function publicNotification(n: NotificationRow) {
+  return {
+    id: n.id,
+    userId: n.userId,
+    type: n.type,
+    message: n.message,
+    relatedId: n.relatedId,
+    read: !!n.read,
+    createdAt: n.createdAt,
   };
 }
 

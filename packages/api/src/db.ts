@@ -73,9 +73,30 @@ const SCHEMA_SQL = `
     "endTime" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'BOOKED',
     "userId" TEXT REFERENCES users("id"),
-    "createdAt" TEXT NOT NULL,
-    UNIQUE("courtId", "date", "startTime")
+    "createdAt" TEXT NOT NULL
   );
+
+  -- Antes había un UNIQUE de tabla en (courtId,date,startTime), lo que impedía
+  -- re-reservar un horario cuya reserva previa fue cancelada. Si una base de
+  -- datos existente todavía tiene ese constraint (de antes de que existiera
+  -- "cancelar reserva"), se elimina aquí de forma segura antes de reemplazarlo
+  -- por el índice único parcial de abajo (que solo aplica a reservas activas).
+  DO $$
+  DECLARE
+    old_constraint TEXT;
+  BEGIN
+    SELECT tc.constraint_name INTO old_constraint
+    FROM information_schema.table_constraints tc
+    WHERE tc.table_name = 'bookings' AND tc.constraint_type = 'UNIQUE'
+    LIMIT 1;
+    IF old_constraint IS NOT NULL THEN
+      EXECUTE 'ALTER TABLE bookings DROP CONSTRAINT ' || quote_ident(old_constraint);
+    END IF;
+  END $$;
+
+  CREATE UNIQUE INDEX IF NOT EXISTS bookings_court_date_start_active_idx
+    ON bookings ("courtId", "date", "startTime")
+    WHERE "status" != 'CANCELLED';
 
   CREATE TABLE IF NOT EXISTS matches (
     "id" TEXT PRIMARY KEY,
@@ -118,12 +139,48 @@ const SCHEMA_SQL = `
     "sponsorName" TEXT NOT NULL,
     "planName" TEXT NOT NULL,
     "clubId" TEXT REFERENCES clubs("id"),
+    "requestedBy" TEXT REFERENCES users("id"),
     "bannerUrl" TEXT,
     "linkUrl" TEXT,
     "startDate" TEXT NOT NULL,
     "endDate" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "amountPaidUsd" DOUBLE PRECISION NOT NULL DEFAULT 0
+  );
+
+  -- Reseña de un club (calificación 1-5 + comentario opcional). Un usuario puede
+  -- dejar una sola reseña por club; si vuelve a enviar, se actualiza (upsert).
+  CREATE TABLE IF NOT EXISTS reviews (
+    "id" TEXT PRIMARY KEY,
+    "clubId" TEXT NOT NULL REFERENCES clubs("id"),
+    "userId" TEXT NOT NULL REFERENCES users("id"),
+    "rating" INTEGER NOT NULL,
+    "comment" TEXT,
+    "createdAt" TEXT NOT NULL,
+    UNIQUE("clubId", "userId")
+  );
+
+  -- Notificaciones dentro de la app (no push/email): se generan cuando pasa algo
+  -- relevante para un usuario (pago verificado, alguien se unió a su partida, etc).
+  CREATE TABLE IF NOT EXISTS notifications (
+    "id" TEXT PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES users("id"),
+    "type" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "relatedId" TEXT,
+    "read" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TEXT NOT NULL
+  );
+
+  -- Tokens de recuperación de contraseña: de un solo uso, con expiración. Se
+  -- guarda el hash del token, nunca el token en texto plano.
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    "id" TEXT PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES users("id"),
+    "tokenHash" TEXT NOT NULL UNIQUE,
+    "expiresAt" TEXT NOT NULL,
+    "usedAt" TEXT,
+    "createdAt" TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS tournaments (
