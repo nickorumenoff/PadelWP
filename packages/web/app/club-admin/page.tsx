@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Booking, Club } from "@padel-ve/shared";
+import type { Booking, Club, ClubReport } from "@padel-ve/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/app/providers";
 import VenezuelaPaymentForm from "@/components/VenezuelaPaymentForm";
@@ -34,6 +34,10 @@ export default function ClubAdminPage() {
   const [closeHour, setCloseHour] = useState(22);
   const [savingHours, setSavingHours] = useState(false);
 
+  const [report, setReport] = useState<ClubReport | null>(null);
+  const [reportDays, setReportDays] = useState(30);
+  const [loadingReport, setLoadingReport] = useState(false);
+
   useEffect(() => {
     if (!user) {
       setLoading(false);
@@ -52,6 +56,17 @@ export default function ClubAdminPage() {
       })
       .finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    if (!myClub) return;
+    setLoadingReport(true);
+    api
+      .getClubReport(myClub.id, reportDays)
+      .then(setReport)
+      .catch(() => setReport(null))
+      .finally(() => setLoadingReport(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myClub?.id, reportDays]);
 
   async function createClub(e: React.FormEvent) {
     e.preventDefault();
@@ -230,6 +245,61 @@ export default function ClubAdminPage() {
             ))}
             {bookings.length === 0 && <p className="text-sm text-muted">Aún no tienes reservas.</p>}
           </div>
+        </section>
+
+        <section className="card p-6 md:col-span-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-ink">Reporte de ocupación e ingresos</h2>
+              <p className="mt-1 text-sm text-muted">
+                Ingresos estimados a partir de las reservas activas (los pagos se cobran directamente en el club).
+              </p>
+            </div>
+            <select className="input w-auto" value={reportDays} onChange={(e) => setReportDays(Number(e.target.value))}>
+              <option value={7}>Últimos 7 días</option>
+              <option value={30}>Últimos 30 días</option>
+              <option value={90}>Últimos 90 días</option>
+            </select>
+          </div>
+
+          {loadingReport && <p className="mt-4 text-sm text-muted">Calculando…</p>}
+
+          {!loadingReport && report && (
+            <>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-line p-4">
+                  <p className="text-xs uppercase text-muted">Reservas</p>
+                  <p className="mt-1 text-xl font-semibold text-ink">{report.totalBookings}</p>
+                </div>
+                <div className="rounded-lg border border-line p-4">
+                  <p className="text-xs uppercase text-muted">Ingreso estimado</p>
+                  <p className="mt-1 text-xl font-semibold text-ink">${report.estimatedRevenueUsd.toFixed(0)}</p>
+                </div>
+                <div className="rounded-lg border border-line p-4">
+                  <p className="text-xs uppercase text-muted">Ocupación</p>
+                  <p className="mt-1 text-xl font-semibold text-ink">{(report.occupancyRate * 100).toFixed(0)}%</p>
+                </div>
+              </div>
+
+              {report.byCourt.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium uppercase text-muted">Por pista</p>
+                  {report.byCourt.map((c) => (
+                    <div
+                      key={c.courtId}
+                      className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium text-ink">{c.courtName}</span>
+                      <span className="text-muted">
+                        {c.bookings} reservas · ${c.estimatedRevenueUsd.toFixed(0)} · {(c.occupancyRate * 100).toFixed(0)}%
+                        ocupación
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </section>
 
         <section className="card p-6">
