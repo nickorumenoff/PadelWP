@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Match } from "@padel-ve/shared";
 import { api } from "@/lib/api";
 import MatchCard from "@/components/MatchCard";
@@ -9,6 +9,7 @@ import { useAuth } from "@/app/providers";
 
 function MatchesInner() {
   const { user } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const highlight = searchParams.get("highlight");
 
@@ -55,7 +56,10 @@ function MatchesInner() {
   }, [user]);
 
   async function handleJoin(matchId: string, team: 1 | 2) {
-    if (!user) return;
+    if (!user) {
+      router.push("/login");
+      return;
+    }
     try {
       await api.joinMatch(matchId, team);
       load();
@@ -72,6 +76,26 @@ function MatchesInner() {
       loadMine();
     } catch {
       alert("No se pudo registrar el resultado.");
+    }
+  }
+
+  async function handleCancel(matchId: string) {
+    try {
+      await api.cancelMatch(matchId);
+      load();
+      loadMine();
+    } catch {
+      alert("No se pudo cancelar la partida.");
+    }
+  }
+
+  async function handleLeave(matchId: string) {
+    try {
+      await api.leaveMatch(matchId);
+      load();
+      loadMine();
+    } catch {
+      alert("No se pudo salir de la partida.");
     }
   }
 
@@ -109,7 +133,13 @@ function MatchesInner() {
           </p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {pendingResult.map((m) => (
-              <MatchCard key={m.id} match={m} onSubmitResult={handleSubmitResult} />
+              <MatchCard
+                key={m.id}
+                match={m}
+                onSubmitResult={handleSubmitResult}
+                onCancel={handleCancel}
+                onLeave={handleLeave}
+              />
             ))}
           </div>
         </section>
@@ -136,7 +166,14 @@ function MatchesInner() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {matches.map((m) => (
-            <MatchCard key={m.id} match={m} onJoin={handleJoin} highlighted={m.id === highlight} />
+            <MatchCard
+              key={m.id}
+              match={m}
+              onJoin={handleJoin}
+              onCancel={handleCancel}
+              onLeave={handleLeave}
+              highlighted={m.id === highlight}
+            />
           ))}
         </div>
       </div>
