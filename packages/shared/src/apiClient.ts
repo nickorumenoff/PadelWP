@@ -1,4 +1,5 @@
 import type {
+  AdSlot,
   AppNotification,
   AuthResponse,
   Booking,
@@ -330,5 +331,25 @@ export class ApiClient {
 
   markAllNotificationsRead() {
     return this.request<{ ok: true }>("/notifications/read-all", "POST");
+  }
+
+  // Espacios publicitarios (admin-only, 4 fijos, sin pago)
+  listAdSlots() {
+    return this.request<AdSlot[]>("/ad-slots");
+  }
+
+  listAllAdSlots() {
+    return this.request<AdSlot[]>("/ad-slots/admin");
+  }
+
+  updateAdSlot(
+    position: 1 | 2 | 3 | 4,
+    input: { title?: string | null; text?: string | null; linkUrl?: string | null; active?: boolean }
+  ) {
+    return this.request<AdSlot>(`/ad-slots/${position}`, "PUT", input);
+  }
+
+  uploadAdSlotImage(position: 1 | 2 | 3 | 4, formData: FormData) {
+    return this.requestForm<AdSlot>(`/ad-slots/${position}/image`, formData);
   }
 }

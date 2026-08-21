@@ -166,4 +166,46 @@ describe("ApiClient", () => {
     await client.getClubReport("club_1", 7);
     expect(fetchMock.mock.calls[1][0]).toBe("https://api.test/clubs/club_1/report?days=7");
   });
+
+  it("listAdSlots y listAllAdSlots llaman a las rutas correctas (pública vs admin)", async () => {
+    const fetchMock = mockFetchOnce([]);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient({ baseUrl: "https://api.test" });
+
+    await client.listAdSlots();
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.test/ad-slots");
+
+    await client.listAllAdSlots();
+    expect(fetchMock.mock.calls[1][0]).toBe("https://api.test/ad-slots/admin");
+  });
+
+  it("updateAdSlot manda PUT con la posición en la ruta y el body serializado", async () => {
+    const fetchMock = mockFetchOnce({ id: "ad_slot_1", position: 2 });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient({ baseUrl: "https://api.test" });
+
+    await client.updateAdSlot(2, { title: "Nuevo título", active: true });
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.test/ad-slots/2");
+    expect(options.method).toBe("PUT");
+    expect(JSON.parse(options.body)).toEqual({ title: "Nuevo título", active: true });
+  });
+
+  it("uploadAdSlotImage manda el FormData directo como body a la ruta con la posición", async () => {
+    const fetchMock = mockFetchOnce({ id: "ad_slot_1", position: 3, imageUrl: "/uploads/ad-slots/x.png" });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ApiClient({ baseUrl: "https://api.test", getToken: () => "my-jwt" });
+
+    const formData = new FormData();
+    formData.append("image", new Blob(["fake"]), "banner.png");
+    await client.uploadAdSlotImage(3, formData);
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.test/ad-slots/3/image");
+    expect(options.method).toBe("POST");
+    expect(options.body).toBe(formData);
+    expect(options.headers["Content-Type"]).toBeUndefined();
+    expect(options.headers.Authorization).toBe("Bearer my-jwt");
+  });
 });

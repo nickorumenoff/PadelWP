@@ -62,6 +62,22 @@ export interface Review {
   user?: User;
 }
 
+/**
+ * Espacio publicitario fijo (posiciones 1-4), gestionado solo por el admin de
+ * plataforma. Coexiste con el autoservicio de patrocinios (Sponsorship): no
+ * lleva seguimiento de pago, es solo contenido con interruptor on/off.
+ */
+export interface AdSlot {
+  id: string;
+  position: 1 | 2 | 3 | 4;
+  title?: string | null;
+  text?: string | null;
+  imageUrl?: string | null;
+  linkUrl?: string | null;
+  active: boolean;
+  updatedAt: string;
+}
+
 export type NotificationType =
   | "MATCH_JOINED"
   | "MATCH_CANCELLED"
