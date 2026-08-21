@@ -1,11 +1,14 @@
 import type {
+  AppNotification,
   AuthResponse,
   Booking,
   CategoryDetail,
   Club,
+  ClubReport,
   Court,
   Match,
   Payment,
+  Review,
   Sponsorship,
   Tournament,
   TournamentCategory,
@@ -55,6 +58,29 @@ export class ApiClient {
     return (await res.json()) as T;
   }
 
+  /**
+   * Sube un archivo (multipart/form-data). No se fuerza el header Content-Type
+   * a propósito: tanto fetch en el navegador como en React Native lo calculan
+   * solos a partir del FormData (incluyen el boundary correcto).
+   */
+  private async requestForm<T>(path: string, formData: FormData): Promise<T> {
+    const headers: Record<string, string> = {};
+    const token = this.getToken?.();
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`API POST ${path} -> ${res.status}: ${text}`);
+    }
+    return (await res.json()) as T;
+  }
+
   // Auth
   register(input: {
     name: string;
@@ -78,6 +104,14 @@ export class ApiClient {
 
   me() {
     return this.request<User>("/auth/me");
+  }
+
+  forgotPassword(email: string) {
+    return this.request<{ ok: true }>("/auth/forgot-password", "POST", { email });
+  }
+
+  resetPassword(token: string, password: string) {
+    return this.request<{ ok: true }>("/auth/reset-password", "POST", { token, password });
   }
 
   // Clubs & courts
@@ -116,6 +150,19 @@ export class ApiClient {
     return this.request<Booking[]>(`/clubs/${clubId}/bookings`);
   }
 
+  getClubReport(clubId: string, days: number = 30) {
+    return this.request<ClubReport>(`/clubs/${clubId}/report?days=${days}`);
+  }
+
+  // Reseñas
+  listClubReviews(clubId: string) {
+    return this.request<Review[]>(`/clubs/${clubId}/reviews`);
+  }
+
+  createClubReview(clubId: string, input: { rating: 1 | 2 | 3 | 4 | 5; comment?: string }) {
+    return this.request<Review>(`/clubs/${clubId}/reviews`, "POST", input);
+  }
+
   // Bookings
   listAvailability(courtId: string, date: string) {
     return this.request<Booking[]>(`/courts/${courtId}/availability?date=${date}`);
@@ -123,6 +170,10 @@ export class ApiClient {
 
   createBooking(input: { courtId: string; date: string; startTime: string; endTime: string }) {
     return this.request<Booking>("/bookings", "POST", input);
+  }
+
+  cancelBooking(bookingId: string) {
+    return this.request<Booking>(`/bookings/${bookingId}/cancel`, "POST");
   }
 
   // Matches
@@ -149,6 +200,14 @@ export class ApiClient {
 
   submitMatchResult(matchId: string, winnerTeam: 1 | 2) {
     return this.request<Match>(`/matches/${matchId}/result`, "POST", { winnerTeam });
+  }
+
+  cancelMatch(matchId: string) {
+    return this.request<Match>(`/matches/${matchId}/cancel`, "POST");
+  }
+
+  leaveMatch(matchId: string) {
+    return this.request<Match>(`/matches/${matchId}/leave`, "POST");
   }
 
   // Tournaments
@@ -236,6 +295,15 @@ export class ApiClient {
     return this.request<Payment[]>("/payments/me");
   }
 
+  /**
+   * Adjunta el comprobante (imagen o PDF) de un pago ya reportado. `formData`
+   * debe traer un único campo de archivo (el nombre del campo no importa,
+   * el backend toma el primer archivo que llegue).
+   */
+  uploadPaymentProof(paymentId: string, formData: FormData) {
+    return this.requestForm<Payment>(`/payments/${paymentId}/proof`, formData);
+  }
+
   // Sponsorships
   listSponsorships() {
     return this.request<Sponsorship[]>("/sponsorships");
@@ -249,5 +317,18 @@ export class ApiClient {
     linkUrl?: string;
   }) {
     return this.request<Sponsorship>("/sponsorships", "POST", input);
+  }
+
+  // Notificaciones
+  listNotifications() {
+    return this.request<AppNotification[]>("/notifications/me");
+  }
+
+  markNotificationRead(id: string) {
+    return this.request<{ ok: true }>(`/notifications/${id}/read`, "POST");
+  }
+
+  markAllNotificationsRead() {
+    return this.request<{ ok: true }>("/notifications/read-all", "POST");
   }
 }

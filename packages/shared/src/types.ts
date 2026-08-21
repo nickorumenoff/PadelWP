@@ -47,6 +47,51 @@ export interface Club {
   closeHour: number;
   createdAt: string;
   courts?: Court[];
+  /** Promedio de reseñas (0 si no tiene ninguna todavía). */
+  avgRating?: number;
+  reviewCount?: number;
+}
+
+export interface Review {
+  id: string;
+  clubId: string;
+  userId: string;
+  rating: 1 | 2 | 3 | 4 | 5;
+  comment?: string | null;
+  createdAt: string;
+  user?: User;
+}
+
+export type NotificationType =
+  | "MATCH_JOINED"
+  | "MATCH_CANCELLED"
+  | "MATCH_LEFT"
+  | "PAYMENT_VERIFIED"
+  | "PAYMENT_REJECTED"
+  | "SPONSORSHIP_ACTIVATED";
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType | string;
+  message: string;
+  relatedId?: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface ClubReport {
+  periodDays: number;
+  totalBookings: number;
+  estimatedRevenueUsd: number;
+  occupancyRate: number;
+  byCourt: {
+    courtId: string;
+    courtName: string;
+    bookings: number;
+    estimatedRevenueUsd: number;
+    occupancyRate: number;
+  }[];
 }
 
 export type CourtType = "CRISTAL" | "MURO" | "PANORAMICA";
@@ -62,7 +107,7 @@ export interface Court {
   pricePerHourUsd: number;
 }
 
-export type BookingStatus = "AVAILABLE" | "BOOKED" | "BLOCKED";
+export type BookingStatus = "AVAILABLE" | "BOOKED" | "BLOCKED" | "CANCELLED";
 
 export interface Booking {
   id: string;
@@ -127,6 +172,7 @@ export interface Sponsorship {
   sponsorName: string;
   planName: string;
   clubId?: string | null;
+  requestedBy?: string | null;
   bannerUrl?: string | null;
   linkUrl?: string | null;
   startDate: string;
