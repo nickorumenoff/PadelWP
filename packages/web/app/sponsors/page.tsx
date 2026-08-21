@@ -5,6 +5,7 @@ import type { Sponsorship } from "@padel-ve/shared";
 import { api } from "@/lib/api";
 import { useAuth } from "@/app/providers";
 import VenezuelaPaymentForm from "@/components/VenezuelaPaymentForm";
+import AdSlotBanner from "@/components/AdSlotBanner";
 
 export default function SponsorsPage() {
   const { user } = useAuth();
@@ -40,6 +41,8 @@ export default function SponsorsPage() {
           promociones dirigidas a jugadores de pádel en toda Venezuela.
         </p>
       </div>
+
+      <AdSlotBanner />
 
       <section>
         <h2 className="mb-4 text-lg font-semibold text-ink">Patrocinadores activos</h2>
