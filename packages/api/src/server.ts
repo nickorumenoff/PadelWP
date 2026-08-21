@@ -14,6 +14,7 @@ import sponsorshipRoutes from "./routes/sponsorships";
 import tournamentRoutes from "./routes/tournaments";
 import reviewRoutes from "./routes/reviews";
 import notificationRoutes from "./routes/notifications";
+import adSlotRoutes from "./routes/ad-slots";
 
 async function main() {
   await initSchema();
@@ -38,6 +39,7 @@ async function main() {
   await app.register(tournamentRoutes);
   await app.register(reviewRoutes);
   await app.register(notificationRoutes);
+  await app.register(adSlotRoutes);
 
   const port = Number(process.env.PORT) || 4000;
   await app.listen({ port, host: "0.0.0.0" });

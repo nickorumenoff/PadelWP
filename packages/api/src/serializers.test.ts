@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  publicAdSlot,
   publicBooking,
   publicClub,
   publicCourt,
@@ -9,6 +10,7 @@ import {
   publicUser,
 } from "./serializers";
 import type {
+  AdSlotRow,
   BookingRow,
   ClubRow,
   CourtRow,
@@ -215,6 +217,39 @@ describe("publicReview", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
     };
     expect(publicReview(review).user).toBeUndefined();
+  });
+});
+
+describe("publicAdSlot", () => {
+  function makeAdSlot(overrides: Partial<AdSlotRow> = {}): AdSlotRow {
+    return {
+      id: "ad_slot_1",
+      position: 1,
+      title: "Marca X",
+      text: "Descuento especial en pádel",
+      imageUrl: "/uploads/ad-slots/img.png",
+      linkUrl: "https://example.com",
+      active: true,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("expone los campos públicos del espacio publicitario", () => {
+    const result = publicAdSlot(makeAdSlot());
+    expect(result).toMatchObject({
+      id: "ad_slot_1",
+      position: 1,
+      title: "Marca X",
+      text: "Descuento especial en pádel",
+      imageUrl: "/uploads/ad-slots/img.png",
+      linkUrl: "https://example.com",
+    });
+  });
+
+  it("convierte active a booleano explícito", () => {
+    expect(publicAdSlot(makeAdSlot({ active: 0 as any })).active).toBe(false);
+    expect(publicAdSlot(makeAdSlot({ active: 1 as any })).active).toBe(true);
   });
 });
 

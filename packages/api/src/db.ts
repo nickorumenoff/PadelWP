@@ -183,6 +183,21 @@ const SCHEMA_SQL = `
     "createdAt" TEXT NOT NULL
   );
 
+  -- Espacios publicitarios propios de la plataforma (no ligados a pago): 4 espacios
+  -- fijos, identificados por "position" (1-4), que un admin de plataforma activa/
+  -- desactiva y llena con foto+título+texto. Coexisten con el autoservicio de
+  -- patrocinadores (tabla sponsorships) en vez de reemplazarlo.
+  CREATE TABLE IF NOT EXISTS ad_slots (
+    "id" TEXT PRIMARY KEY,
+    "position" INTEGER NOT NULL UNIQUE,
+    "title" TEXT,
+    "text" TEXT,
+    "imageUrl" TEXT,
+    "linkUrl" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT false,
+    "updatedAt" TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS tournaments (
     "id" TEXT PRIMARY KEY,
     "createdBy" TEXT NOT NULL REFERENCES users("id"),
@@ -292,7 +307,19 @@ let schemaReady: Promise<void> | null = null;
  */
 export function initSchema(): Promise<void> {
   if (!schemaReady) {
-    schemaReady = pool.query(SCHEMA_SQL).then(() => undefined);
+    schemaReady = pool
+      .query(SCHEMA_SQL)
+      .then(() =>
+        // Garantiza que siempre existan exactamente los 4 espacios publicitarios fijos
+        // (posiciones 1-4), sin pisar los ya configurados por el admin.
+        pool.query(`
+          INSERT INTO ad_slots ("id", "position", "active", "updatedAt")
+          SELECT 'ad_slot_' || pos, pos, false, NOW()::TEXT
+          FROM generate_series(1, 4) AS pos
+          ON CONFLICT ("position") DO NOTHING
+        `)
+      )
+      .then(() => undefined);
   }
   return schemaReady;
 }

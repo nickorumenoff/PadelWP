@@ -124,6 +124,17 @@ export interface NotificationRow {
   createdAt: string;
 }
 
+export interface AdSlotRow {
+  id: string;
+  position: number;
+  title: string | null;
+  text: string | null;
+  imageUrl: string | null;
+  linkUrl: string | null;
+  active: boolean;
+  updatedAt: string;
+}
+
 export interface PasswordResetTokenRow {
   id: string;
   userId: string;
@@ -622,6 +633,36 @@ export const Reviews = {
     );
     const row = res.rows[0];
     return { avgRating: Number(row.avg), reviewCount: Number(row.count) };
+  },
+};
+
+// ---------- Espacios publicitarios (4 fijos, solo admin, sin pago) ----------
+
+export const AdSlots = {
+  listActive(): Promise<AdSlotRow[]> {
+    return selectMany<AdSlotRow>("ad_slots", { active: true }, `"position" ASC`);
+  },
+  listAll(): Promise<AdSlotRow[]> {
+    return selectMany<AdSlotRow>("ad_slots", {}, `"position" ASC`);
+  },
+  findByPosition(position: number): Promise<AdSlotRow | undefined> {
+    return selectOne<AdSlotRow>("ad_slots", { position });
+  },
+  async update(
+    position: number,
+    input: { title?: string | null; text?: string | null; linkUrl?: string | null; active?: boolean }
+  ): Promise<AdSlotRow | undefined> {
+    const sets: Record<string, unknown> = { updatedAt: nowIso() };
+    if (input.title !== undefined) sets.title = input.title;
+    if (input.text !== undefined) sets.text = input.text;
+    if (input.linkUrl !== undefined) sets.linkUrl = input.linkUrl;
+    if (input.active !== undefined) sets.active = input.active;
+    await updateRow2("ad_slots", { position }, sets);
+    return AdSlots.findByPosition(position);
+  },
+  async setImage(position: number, imageUrl: string): Promise<AdSlotRow | undefined> {
+    await updateRow2("ad_slots", { position }, { imageUrl, updatedAt: nowIso() });
+    return AdSlots.findByPosition(position);
   },
 };
 

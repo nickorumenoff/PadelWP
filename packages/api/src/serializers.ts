@@ -1,4 +1,5 @@
 import type {
+  AdSlotRow,
   BookingRow,
   BracketMatchRow,
   ClubRow,
@@ -82,6 +83,19 @@ export function publicReview(r: ReviewRow & { user?: UserRow }) {
     comment: r.comment,
     createdAt: r.createdAt,
     user: r.user ? publicUser(r.user) : undefined,
+  };
+}
+
+export function publicAdSlot(s: AdSlotRow) {
+  return {
+    id: s.id,
+    position: s.position,
+    title: s.title,
+    text: s.text,
+    imageUrl: s.imageUrl,
+    linkUrl: s.linkUrl,
+    active: !!s.active,
+    updatedAt: s.updatedAt,
   };
 }
 
