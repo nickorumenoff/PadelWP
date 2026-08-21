@@ -1,9 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View, StyleSheet } from "react-native";
-import type { Club, Tournament } from "@padel-ve/shared";
-import { api } from "../lib/api";
+import { Alert, Image, Pressable, ScrollView, Switch, Text, TextInput, View, StyleSheet } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import type { AdSlot, Club, Tournament } from "@padel-ve/shared";
+import { api, API_BASE_URL } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme";
+
+function resolveUploadUrl(pathOrUrl?: string | null): string | undefined {
+  if (!pathOrUrl) return undefined;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  return `${API_BASE_URL}${pathOrUrl.startsWith("/") ? "" : "/"}${pathOrUrl}`;
+}
 
 export default function AdminScreen() {
   const { user } = useAuth();
@@ -13,6 +20,18 @@ export default function AdminScreen() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const [adSlots, setAdSlots] = useState<AdSlot[]>([]);
+  const [loadingAdSlots, setLoadingAdSlots] = useState(true);
+
+  function loadAdSlots() {
+    setLoadingAdSlots(true);
+    api
+      .listAllAdSlots()
+      .then(setAdSlots)
+      .catch(() => setAdSlots([]))
+      .finally(() => setLoadingAdSlots(false));
+  }
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -27,6 +46,7 @@ export default function AdminScreen() {
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false);
+      setLoadingAdSlots(false);
       return;
     }
     Promise.all([api.listTournaments(), api.listClubs()])
@@ -35,6 +55,7 @@ export default function AdminScreen() {
         setClubs(c);
       })
       .finally(() => setLoading(false));
+    loadAdSlots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
@@ -170,7 +191,103 @@ export default function AdminScreen() {
           </Text>
         </View>
       ))}
+
+      <Text style={styles.sectionLabel}>Espacios publicitarios</Text>
+      <Text style={styles.helperText}>
+        4 espacios fijos que puedes activar/desactivar, con foto, título y un poco de texto. Aparecen en inicio y
+        en la página de patrocinadores. Sin seguimiento de pago (coexisten con el autoservicio de arriba).
+      </Text>
+      {loadingAdSlots && <Text style={styles.helperText}>Cargando…</Text>}
+      {!loadingAdSlots &&
+        adSlots.map((slot) => <AdSlotEditorCard key={slot.position} slot={slot} onSaved={loadAdSlots} />)}
     </ScrollView>
+  );
+}
+
+function AdSlotEditorCard({ slot, onSaved }: { slot: AdSlot; onSaved: () => void }) {
+  const [title, setTitle] = useState(slot.title || "");
+  const [text, setText] = useState(slot.text || "");
+  const [linkUrl, setLinkUrl] = useState(slot.linkUrl || "");
+  const [active, setActive] = useState(slot.active);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  async function pickImage() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permiso necesario", "Necesitamos acceso a tus fotos para subir la imagen.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const uri = result.assets[0].uri;
+    setUploading(true);
+    try {
+      const filename = uri.split("/").pop() || "imagen.jpg";
+      const ext = filename.split(".").pop()?.toLowerCase();
+      const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+      const formData = new FormData();
+      formData.append("image", { uri, name: filename, type: mimeType } as any);
+      await api.uploadAdSlotImage(slot.position, formData);
+      onSaved();
+    } catch {
+      Alert.alert("No se pudo subir la imagen");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.updateAdSlot(slot.position, {
+        title: title || null,
+        text: text || null,
+        linkUrl: linkUrl || null,
+        active,
+      });
+      onSaved();
+    } catch {
+      Alert.alert("No se pudo guardar el espacio");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <View style={styles.formCard}>
+      <View style={styles.adSlotHeaderRow}>
+        <Text style={styles.sectionLabel}>Espacio {slot.position}</Text>
+        <View style={styles.row}>
+          <Text style={styles.helperText}>Activo</Text>
+          <Switch value={active} onValueChange={setActive} />
+        </View>
+      </View>
+
+      {!!slot.imageUrl && <Image source={{ uri: resolveUploadUrl(slot.imageUrl) }} style={styles.adSlotImage} />}
+      <Pressable style={styles.chip} onPress={pickImage} disabled={uploading}>
+        <Text style={styles.chipText}>{uploading ? "Subiendo…" : "Elegir imagen"}</Text>
+      </Pressable>
+
+      <TextInput style={styles.input} placeholder="Título" value={title} onChangeText={setTitle} maxLength={80} />
+      <TextInput
+        style={[styles.input, { height: 60 }]}
+        placeholder="Texto"
+        multiline
+        value={text}
+        onChangeText={setText}
+        maxLength={280}
+      />
+      <TextInput style={styles.input} placeholder="Enlace (opcional)" value={linkUrl} onChangeText={setLinkUrl} />
+
+      <Pressable style={[styles.button, { marginTop: 10 }]} disabled={saving} onPress={save}>
+        <Text style={styles.buttonText}>{saving ? "Guardando…" : "Guardar"}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -183,6 +300,8 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.muted, textTransform: "uppercase", marginTop: 20, marginBottom: 8 },
   label: { fontSize: 11, fontWeight: "700", color: colors.muted, marginTop: 10, marginBottom: 6, textTransform: "uppercase" },
   formCard: { backgroundColor: colors.mist, borderRadius: 16, padding: 14, marginTop: 14 },
+  adSlotHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  adSlotImage: { width: "100%", height: 100, borderRadius: 10, marginBottom: 8 },
   input: {
     borderWidth: 1,
     borderColor: colors.line,

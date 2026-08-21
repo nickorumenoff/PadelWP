@@ -3,6 +3,7 @@ import { FlatList, Pressable, RefreshControl, Text, TextInput, View, StyleSheet 
 import type { Club, Sponsorship } from "@padel-ve/shared";
 import { api } from "../lib/api";
 import { colors } from "../theme";
+import AdSlotBanner from "../components/AdSlotBanner";
 
 export default function ExploreScreen({ navigation }: any) {
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -53,6 +54,8 @@ export default function ExploreScreen({ navigation }: any) {
           <Text style={styles.sponsorPlan}>{sponsorships[0].planName}</Text>
         </View>
       )}
+
+      <AdSlotBanner />
 
       <FlatList
         data={clubs}

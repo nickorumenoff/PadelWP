@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme";
 import PaymentForm from "../components/PaymentForm";
+import AdSlotBanner from "../components/AdSlotBanner";
 
 const PLANS = ["Banner destacado - 1 mes", "Club destacado - 1 mes", "Club premium - 3 meses"];
 
@@ -39,6 +40,8 @@ export default function SponsorsScreen() {
         Marcas y negocios pueden pagar por presencia destacada dentro de Padel WP: banners, posicionamiento y
         promociones dirigidas a jugadores de pádel en toda Venezuela.
       </Text>
+
+      <AdSlotBanner />
 
       <Text style={styles.sectionLabel}>Patrocinadores activos</Text>
       {sponsorships.length === 0 && <Text style={styles.helperText}>Todavía no hay patrocinadores activos.</Text>}
