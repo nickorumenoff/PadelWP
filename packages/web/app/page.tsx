@@ -5,6 +5,7 @@ import type { Club, Sponsorship } from "@padel-ve/shared";
 import { api } from "@/lib/api";
 import ClubCard from "@/components/ClubCard";
 import SponsorBanner from "@/components/SponsorBanner";
+import AdSlotBanner from "@/components/AdSlotBanner";
 
 export default function HomePage() {
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -64,6 +65,8 @@ export default function HomePage() {
       </section>
 
       {sponsorships.length > 0 && <SponsorBanner sponsorships={sponsorships} />}
+
+      <AdSlotBanner />
 
       <section>
         <div className="mb-4 flex items-center justify-between">
