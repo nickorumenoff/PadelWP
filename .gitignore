@@ -5,3 +5,5 @@ dist
 *.db
 .env
 .turbo
+*.tsbuildinfo
+packages/api/uploads
