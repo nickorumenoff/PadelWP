@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Pressable, Text, TextInput, View, StyleSheet } from "react-native";
+import { Alert, Image, Pressable, Text, TextInput, View, StyleSheet } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { api } from "../lib/api";
 import { colors } from "../theme";
 
@@ -30,15 +31,43 @@ export default function PaymentForm({
   const [currency, setCurrency] = useState<"USD" | "VES">("USD");
   const [method, setMethod] = useState<(typeof methods)[number]["value"]>("PAGO_MOVIL");
   const [reference, setReference] = useState("");
+  const [proofUri, setProofUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function pickProof() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permiso necesario", "Necesitamos acceso a tus fotos para adjuntar el comprobante.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setProofUri(result.assets[0].uri);
+    }
+  }
 
   async function submit() {
     setSubmitting(true);
     setError(null);
     try {
-      await api.submitPayment({ amount: Number(amount) || 0, currency, method, reference, purpose, relatedId });
+      const payment = await api.submitPayment({ amount: Number(amount) || 0, currency, method, reference, purpose, relatedId });
+      if (proofUri) {
+        try {
+          const formData = new FormData();
+          const filename = proofUri.split("/").pop() || "comprobante.jpg";
+          const ext = filename.split(".").pop()?.toLowerCase();
+          const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+          formData.append("proof", { uri: proofUri, name: filename, type: mimeType } as any);
+          await api.uploadPaymentProof(payment.id, formData);
+        } catch {
+          // El pago ya quedó registrado; el comprobante es un extra, no bloqueamos el flujo.
+        }
+      }
       setDone(true);
       onDone?.();
     } catch {
@@ -91,6 +120,20 @@ export default function PaymentForm({
         value={reference}
         onChangeText={setReference}
       />
+
+      <Text style={styles.label}>Comprobante (foto, opcional)</Text>
+      {proofUri ? (
+        <View style={{ marginTop: 4 }}>
+          <Image source={{ uri: proofUri }} style={{ width: 100, height: 100, borderRadius: 10 }} />
+          <Pressable onPress={() => setProofUri(null)} style={{ marginTop: 6 }}>
+            <Text style={{ fontSize: 12, color: colors.blue }}>Quitar foto</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable style={styles.chip} onPress={pickProof}>
+          <Text style={styles.chipText}>Elegir foto</Text>
+        </Pressable>
+      )}
 
       {error && <Text style={styles.error}>{error}</Text>}
 
